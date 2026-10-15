@@ -4706,20 +4706,7 @@ dialog.compact-modal::backdrop {
   height: 6.5px;
   border-radius: 50%;
   background: #22c55e;
-  box-shadow: 0 0 7px #22c55e;
-  animation: onlineDotPulse 1.8s infinite ease-in-out;
   flex-shrink: 0;
-}
-
-@keyframes onlineDotPulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.25);
-    opacity: 0.65;
-  }
 }
 
 
