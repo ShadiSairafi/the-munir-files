@@ -4390,7 +4390,7 @@
         return `
         <div class="chat-msg-item ${groupClasses}" data-chat-msg-id="${escapeHtmlAttr(m.id || "")}">
           ${
-            isGroupEnd
+            isGroupStart
               ? `<span class="detective-avatar-frame chat-avatar-pill" title="${escapeHtmlAttr(m.userName || "Detective")}">${renderAvatarHtml(m)}</span>`
               : `<span class="chat-avatar-spacer" aria-hidden="true"></span>`
           }

@@ -3754,14 +3754,14 @@ mark.search-highlight {
 .chat-msg-item {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 6px;
   max-width: 90%;
   width: fit-content;
 }
 
 .chat-msg-item.is-group-start {
-  margin-top: 3px;
+  margin-top: 4px;
 }
 
 .chat-msg-item.is-group-continuation {
@@ -3782,6 +3782,7 @@ mark.search-highlight {
   flex-shrink: 0;
   width: 24px;
   height: 24px;
+  margin-top: 2px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 
@@ -3874,8 +3875,8 @@ mark.search-highlight {
   border: 1px solid rgba(148, 163, 184, 0.24);
 }
 
-.chat-msg-item.is-other-msg.is-group-end .chat-msg-body {
-  border-bottom-left-radius: 3px;
+.chat-msg-item.is-other-msg.is-group-start .chat-msg-body {
+  border-top-left-radius: 3px;
 }
 
 .chat-msg-item.is-other-msg.is-group-middle .chat-msg-body {
@@ -3892,8 +3893,8 @@ mark.search-highlight {
   border: 1px solid rgba(218, 175, 92, 0.42);
 }
 
-.chat-msg-item.is-own-msg.is-group-end .chat-msg-body {
-  border-bottom-right-radius: 3px;
+.chat-msg-item.is-own-msg.is-group-start .chat-msg-body {
+  border-top-right-radius: 3px;
 }
 
 .chat-msg-item.is-own-msg.is-group-middle .chat-msg-body {
@@ -3970,14 +3971,17 @@ mark.search-highlight {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  opacity: 0.38;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 0.14s ease;
   flex-shrink: 0;
   align-self: center;
 }
 
-.chat-msg-item:hover .chat-msg-actions {
+.chat-msg-item:hover .chat-msg-actions,
+.chat-msg-item:focus-within .chat-msg-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .chat-reply-btn,
