@@ -359,6 +359,19 @@ module.exports = async function handler(req, res) {
 
     store.version += 1;
 
+    const isEphemeral =
+      action === "presence_ping" ||
+      action === "presence_leave" ||
+      action === "cursor_update" ||
+      action === "cursor_leave";
+
+    if (isEphemeral) {
+      return res.status(200).json({
+        ok: true,
+        version: store.version
+      });
+    }
+
     return res.status(200).json({
       ok: true,
       version: store.version,

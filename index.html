@@ -175,32 +175,33 @@
         </div>
       </div>
 
-      <!-- Full-Text Transcript & Quote Search -->
-      <div class="search-box-wrapper">
-        <span class="search-icon">
-          <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </span>
-        <input
-          type="search"
-          id="globalSearchInput"
-          class="search-input"
-          placeholder="Search all 49 transcripts ('yearner', '6:33', 'cake', 'hala', 'EX-22')..."
-          aria-label="Search declassified transcripts"
-        />
-        <button type="button" class="search-clear-btn" id="clearSearchBtn">CLEAR</button>
-      </div>
+      <!-- Top-Right Cluster: Search Box + Live Stacked Online Users Pill -->
+      <div class="command-bar-right">
+        <div class="search-box-wrapper">
+          <span class="search-icon">
+            <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <input
+            type="search"
+            id="globalSearchInput"
+            class="search-input"
+            placeholder="Search all 49 transcripts ('yearner', '6:33', 'cake', 'hala', 'EX-22')..."
+            aria-label="Search declassified transcripts"
+          />
+          <button type="button" class="search-clear-btn" id="clearSearchBtn">CLEAR</button>
+        </div>
 
-      <!-- Detective Identity Badge + Live Online Users Stack + Quick Controls -->
-      <div class="toolbar-actions">
         <div class="online-users-cluster" id="onlineUsersCluster" aria-label="Active Detectives Online">
           <div class="online-avatars-stack" id="onlineAvatarsStack"></div>
-          <span class="online-count-badge" id="onlineUsersCountBadge" title="Detectives currently in the files">
+          <span class="online-count-badge" id="onlineUsersCountBadge">
             <span class="online-live-dot"></span>
             <span id="onlineUsersCountNum">1</span>
           </span>
-          <div class="online-users-popover" id="onlineUsersPopover" role="tooltip"></div>
         </div>
+      </div>
 
+      <!-- Detective Identity Badge + Quick Controls -->
+      <div class="toolbar-actions">
         <button type="button" class="detective-id-pill" id="userIdentityPill" title="Click to customize your Detective Alias & Cute Avatar">
           <span class="detective-avatar-frame" id="headerUserAvatar"></span>
           <span id="headerUserName">Detective</span>
@@ -302,14 +303,6 @@
           <div id="lbTitle"></div>
           <div id="lbMeta"></div>
         </div>
-        <div class="online-users-cluster is-lightbox-cluster" id="lbOnlineUsersCluster" aria-label="Detectives Online">
-          <div class="online-avatars-stack" id="lbOnlineAvatarsStack"></div>
-          <span class="online-count-badge" id="lbOnlineUsersCountBadge" title="Detectives currently online">
-            <span class="online-live-dot"></span>
-            <span id="lbOnlineUsersCountNum">1</span>
-          </span>
-          <div class="online-users-popover" id="lbOnlineUsersPopover" role="tooltip"></div>
-        </div>
       </div>
 
       <div class="lightbox-controls">
@@ -384,6 +377,15 @@
           <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
           <span>Panel</span>
         </button>
+
+        <div class="online-users-cluster is-lightbox-cluster" id="lbOnlineUsersCluster" aria-label="Detectives Online">
+          <div class="online-avatars-stack" id="lbOnlineAvatarsStack"></div>
+          <span class="online-count-badge" id="lbOnlineUsersCountBadge">
+            <span class="online-live-dot"></span>
+            <span id="lbOnlineUsersCountNum">1</span>
+          </span>
+        </div>
+
         <button type="button" class="tool-btn btn-danger-accent" id="lbCloseBtn">
           <svg class="svg-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           <span>CLOSE</span>

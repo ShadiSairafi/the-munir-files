@@ -449,11 +449,11 @@
         src.loop = true;
         // Start at a random offset inside the 2.3s loop so every stroke has fresh paper texture
         const offset = Math.random() * Math.max(0.1, buffers[0].duration - 0.2);
-        src.playbackRate.setValueAtTime(0.95, ctx.currentTime);
+        src.playbackRate.setValueAtTime(0.96, ctx.currentTime);
 
         const gainNode = ctx.createGain();
-        // Start silent (0.0) so pressing the mouse down without moving produces zero thud!
-        gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+        // Start at soft paper contact (0.04) so there is zero thud and smooth ramp-up on movement
+        gainNode.gain.setValueAtTime(0.04, ctx.currentTime);
 
         src.connect(gainNode);
         gainNode.connect(ctx.destination);
@@ -468,7 +468,7 @@
       if (pool.length > 0) {
         const clone = pool[0].cloneNode();
         clone.loop = true;
-        clone.volume = 0.01;
+        clone.volume = 0.08;
         clone.play().catch(() => {});
         activePenHtmlAudio = clone;
       }
@@ -482,15 +482,14 @@
     }
     try {
       const speed = Math.max(0, Math.min(45, moveDistPx));
-      const targetVol = Math.min(0.76, 0.18 + speed * 0.016);
-      const targetRate = Math.max(0.86, Math.min(1.22, 0.92 + speed * 0.0075));
+      const targetVol = Math.min(0.78, 0.28 + speed * 0.014);
+      const targetRate = Math.max(0.88, Math.min(1.2, 0.94 + speed * 0.0065));
 
       if (activePenGain && audioCtx) {
         const now = audioCtx.currentTime;
-        activePenGain.gain.cancelScheduledValues(now);
-        activePenGain.gain.setTargetAtTime(targetVol, now, 0.018);
+        activePenGain.gain.setTargetAtTime(targetVol, now, 0.028);
         if (activePenSource) {
-          activePenSource.playbackRate.setTargetAtTime(targetRate, now, 0.025);
+          activePenSource.playbackRate.setTargetAtTime(targetRate, now, 0.035);
         }
       } else if (activePenHtmlAudio) {
         activePenHtmlAudio.volume = Math.min(1, targetVol);
@@ -501,12 +500,11 @@
       penIdleSilenceTimer = setTimeout(() => {
         if (activePenGain && audioCtx) {
           const now = audioCtx.currentTime;
-          activePenGain.gain.cancelScheduledValues(now);
-          activePenGain.gain.setTargetAtTime(0.0001, now, 0.025);
+          activePenGain.gain.setTargetAtTime(0.015, now, 0.06);
         } else if (activePenHtmlAudio) {
-          activePenHtmlAudio.volume = 0.0;
+          activePenHtmlAudio.volume = 0.02;
         }
-      }, 65);
+      }, 210);
     } catch (_e) {}
   }
 
@@ -845,13 +843,25 @@
     } catch (_e) {}
   }
 
+  let saveCacheTimer = null;
   function saveSharedCache() {
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.SHARED_STATE_CACHE,
-        JSON.stringify(state.shared)
-      );
-    } catch (_e) {}
+    if (saveCacheTimer) return;
+    saveCacheTimer = setTimeout(() => {
+      saveCacheTimer = null;
+      try {
+        const persistentOnly = {
+          chatsByExhibit: state.shared.chatsByExhibit,
+          marksByExhibit: state.shared.marksByExhibit,
+          notesByExhibit: state.shared.notesByExhibit,
+          poiOverrides: state.shared.poiOverrides,
+          auditLog: (state.shared.auditLog || []).slice(0, 200)
+        };
+        localStorage.setItem(
+          STORAGE_KEYS.SHARED_STATE_CACHE,
+          JSON.stringify(persistentOnly)
+        );
+      } catch (_e) {}
+    }, 650);
   }
 
   // ============================================================================
@@ -956,7 +966,10 @@
     const munirSubj = META.subjects.find((s) => s.id === "munir");
     if (munirSubj) {
       const eff = getEffectiveSubject(munirSubj);
-      coverImg.src = eff.avatarUrl;
+      if (coverImg.dataset.lastSrc !== eff.avatarUrl) {
+        coverImg.dataset.lastSrc = eff.avatarUrl;
+        coverImg.src = eff.avatarUrl;
+      }
     }
   }
 
@@ -1196,8 +1209,145 @@
     refreshLiveCollaborativeViews();
   }
 
+  function applyIncomingEphemeral(delta) {
+    if (!delta || typeof delta !== "object") return;
+    if (delta.senderId && delta.senderId === state.userProfile?.id) return;
+
+    const now = Date.now();
+    const { action, exhibitId, userId } = delta;
+
+    if (action === "cursor_update" && exhibitId && userId) {
+      if (!state.shared.cursorsByExhibit) state.shared.cursorsByExhibit = {};
+      if (!state.shared.cursorsByExhibit[exhibitId]) {
+        state.shared.cursorsByExhibit[exhibitId] = {};
+      }
+      state.shared.cursorsByExhibit[exhibitId][userId] = {
+        userId,
+        userName: delta.userName || "Detective",
+        avatarId: delta.avatarId || "cat-sherlock",
+        customAvatarUrl: delta.customAvatarUrl || "",
+        tool: delta.tool || "pencil",
+        color: delta.color || "yellow",
+        x: Number(delta.x ?? 0.5),
+        y: Number(delta.y ?? 0.5),
+        activePoints: Array.isArray(delta.activePoints)
+          ? delta.activePoints
+          : null,
+        ts: now
+      };
+      if (state.lightboxOpen) {
+        const curEx = EXHIBITS[state.currentExhibitIndex];
+        if (curEx && curEx.id === exhibitId) {
+          renderMultiUserCursorsLayer(curEx);
+        }
+      }
+    } else if (action === "cursor_leave" && exhibitId && userId) {
+      if (
+        state.shared.cursorsByExhibit &&
+        state.shared.cursorsByExhibit[exhibitId]
+      ) {
+        delete state.shared.cursorsByExhibit[exhibitId][userId];
+      }
+      if (state.lightboxOpen) {
+        const curEx = EXHIBITS[state.currentExhibitIndex];
+        if (curEx && curEx.id === exhibitId) {
+          renderMultiUserCursorsLayer(curEx);
+        }
+      }
+    } else if (action === "presence_ping" && userId) {
+      if (!state.shared.presenceByUser) state.shared.presenceByUser = {};
+      state.shared.presenceByUser[userId] = {
+        userId,
+        userName: delta.userName || "Detective",
+        avatarId: delta.avatarId || "cat-sherlock",
+        customAvatarUrl: delta.customAvatarUrl || "",
+        exhibitId: exhibitId || null,
+        locationLabel: delta.locationLabel || "In Dossier",
+        ts: now
+      };
+      renderOnlineUsersWidget();
+    } else if (action === "presence_leave" && userId) {
+      if (state.shared.presenceByUser) {
+        delete state.shared.presenceByUser[userId];
+      }
+      renderOnlineUsersWidget();
+    }
+  }
+
+  let ephemeralPostInFlight = false;
+  let queuedCursorPayload = null;
+
+  async function flushEphemeralPost(payload) {
+    if (ephemeralPostInFlight) {
+      if (payload.action === "cursor_update") {
+        queuedCursorPayload = payload;
+      }
+      return;
+    }
+    ephemeralPostInFlight = true;
+    try {
+      const res = await fetch("/api/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.version === "number" && data.version > state.sharedVersion) {
+          state.sharedVersion = data.version;
+        }
+      }
+    } catch (_e) {
+    } finally {
+      ephemeralPostInFlight = false;
+      if (queuedCursorPayload) {
+        const next = queuedCursorPayload;
+        queuedCursorPayload = null;
+        flushEphemeralPost(next);
+      }
+    }
+  }
+
+  function sendEphemeralSync(payload) {
+    const now = Date.now();
+    const withSender = {
+      ...payload,
+      senderId: state.userProfile?.id || payload.userId
+    };
+
+    if (payload.action === "presence_ping" && payload.userId) {
+      if (!state.shared.presenceByUser) state.shared.presenceByUser = {};
+      state.shared.presenceByUser[payload.userId] = {
+        userId: payload.userId,
+        userName: payload.userName || "Detective",
+        avatarId: payload.avatarId || "cat-sherlock",
+        customAvatarUrl: payload.customAvatarUrl || "",
+        exhibitId: payload.exhibitId || null,
+        locationLabel: payload.locationLabel || "In Dossier",
+        ts: now
+      };
+      renderOnlineUsersWidget();
+    }
+
+    if (broadcastChannel) {
+      try {
+        broadcastChannel.postMessage({
+          type: "EPHEMERAL_SYNC",
+          delta: withSender
+        });
+      } catch (_e) {}
+    }
+
+    flushEphemeralPost(withSender);
+  }
+
   let fetchInFlight = false;
   async function fetchServerState(forceFull = false) {
+    if (!forceFull && liveEventSource && liveEventSource.readyState === 1) {
+      // SSE stream is actively pushing updates in 0ms; only refresh local online users expiry
+      renderOnlineUsersWidget();
+      return;
+    }
     if (fetchInFlight) return;
     fetchInFlight = true;
     try {
@@ -1220,7 +1370,6 @@
         }
       }
     } catch (_e) {
-      // Offline or static-only fallback: still refresh online users widget locally
       renderOnlineUsersWidget();
     } finally {
       fetchInFlight = false;
@@ -1236,10 +1385,19 @@
       es.onmessage = (ev) => {
         try {
           const payload = JSON.parse(ev.data);
-          if (payload && payload.state) {
-            if (typeof payload.version === "number" && payload.version > state.sharedVersion) {
-              state.sharedVersion = payload.version;
-            }
+          if (!payload) return;
+          if (typeof payload.version === "number" && payload.version > state.sharedVersion) {
+            state.sharedVersion = payload.version;
+          }
+          // Ignore self-echo so local UI never stutters or re-merges its own actions
+          if (payload.senderId && payload.senderId === state.userProfile?.id) {
+            return;
+          }
+          if (payload.ephemeral && payload.delta) {
+            applyIncomingEphemeral(payload.delta);
+            return;
+          }
+          if (payload.state) {
             mergeSharedState(payload.state);
           }
         } catch (_err) {}
@@ -1254,6 +1412,17 @@
   }
 
   async function dispatchSharedAction(payload) {
+    // Route high-frequency ephemeral actions through the non-blocking fast path
+    if (
+      payload.action === "cursor_update" ||
+      payload.action === "cursor_leave" ||
+      payload.action === "presence_ping" ||
+      payload.action === "presence_leave"
+    ) {
+      sendEphemeralSync(payload);
+      return;
+    }
+
     const now = Date.now();
     const uid = () =>
       now.toString(36) + "-" + Math.random().toString(36).slice(2, 7);
@@ -1371,32 +1540,6 @@
             : `Added forensic ${markType.toUpperCase()} box on ${exhibitId}`,
         ts: now
       });
-    } else if (action === "cursor_update" && exhibitId && userId) {
-      if (!state.shared.cursorsByExhibit) state.shared.cursorsByExhibit = {};
-      if (!state.shared.cursorsByExhibit[exhibitId]) {
-        state.shared.cursorsByExhibit[exhibitId] = {};
-      }
-      state.shared.cursorsByExhibit[exhibitId][userId] = {
-        userId,
-        userName,
-        avatarId,
-        customAvatarUrl,
-        tool: payload.tool || "pencil",
-        color: payload.color || "yellow",
-        x: Number(payload.x ?? 0.5),
-        y: Number(payload.y ?? 0.5),
-        activePoints: Array.isArray(payload.activePoints)
-          ? payload.activePoints
-          : null,
-        ts: now
-      };
-    } else if (action === "cursor_leave" && exhibitId && userId) {
-      if (
-        state.shared.cursorsByExhibit &&
-        state.shared.cursorsByExhibit[exhibitId]
-      ) {
-        delete state.shared.cursorsByExhibit[exhibitId][userId];
-      }
     } else if (
       action === "update_mark" &&
       exhibitId &&
@@ -1480,43 +1623,6 @@
         }`,
         ts: now
       });
-    } else if (action === "presence_ping" && userId) {
-      if (!state.shared.presenceByUser) state.shared.presenceByUser = {};
-      state.shared.presenceByUser[userId] = {
-        userId,
-        userName: userName || "Detective",
-        avatarId: avatarId || "cat-sherlock",
-        customAvatarUrl: customAvatarUrl || "",
-        exhibitId: exhibitId || null,
-        locationLabel: payload.locationLabel || "In Dossier",
-        ts: now
-      };
-    } else if (action === "presence_leave" && userId) {
-      if (state.shared.presenceByUser) {
-        delete state.shared.presenceByUser[userId];
-      }
-    }
-
-    // Keep user's own presence fresh on any action
-    if (userId && action !== "presence_leave") {
-      if (!state.shared.presenceByUser) state.shared.presenceByUser = {};
-      const existing = state.shared.presenceByUser[userId] || {};
-      state.shared.presenceByUser[userId] = {
-        userId,
-        userName: userName || existing.userName || "Detective",
-        avatarId: avatarId || existing.avatarId || "cat-sherlock",
-        customAvatarUrl:
-          customAvatarUrl !== undefined
-            ? customAvatarUrl
-            : existing.customAvatarUrl || "",
-        exhibitId:
-          exhibitId !== undefined ? exhibitId : existing.exhibitId || null,
-        locationLabel:
-          payload.locationLabel ||
-          existing.locationLabel ||
-          (exhibitId ? `Inspecting ${exhibitId}` : "In Dossier"),
-        ts: now
-      };
     }
 
     saveSharedCache();
@@ -1526,6 +1632,7 @@
       try {
         broadcastChannel.postMessage({
           type: "STATE_SYNC",
+          senderId: state.userProfile?.id,
           state: state.shared
         });
       } catch (_e) {}
@@ -1535,7 +1642,10 @@
       const res = await fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          ...payload,
+          senderId: state.userProfile?.id || userId
+        })
       });
       if (res.ok) {
         const data = await res.json();
@@ -1587,7 +1697,7 @@
   function sendPresenceHeartbeat() {
     if (!state.userProfile || !state.userProfile.id) return;
     const loc = getCurrentUserLocationInfo();
-    dispatchSharedAction({
+    sendEphemeralSync({
       action: "presence_ping",
       userId: state.userProfile.id,
       userName: state.userProfile.name,
@@ -1602,7 +1712,6 @@
     const now = Date.now();
     const map = new Map();
 
-    // Always include current user first
     if (state.userProfile && state.userProfile.id) {
       const loc = getCurrentUserLocationInfo();
       map.set(state.userProfile.id, {
@@ -1617,7 +1726,6 @@
       });
     }
 
-    // Merge active presence heartbeats (within last 20 seconds)
     const presenceMap = state.shared.presenceByUser || {};
     for (const [uid, pObj] of Object.entries(presenceMap)) {
       if (!pObj || !uid) continue;
@@ -1635,7 +1743,6 @@
       }
     }
 
-    // Also include anyone actively moving a cursor on any exhibit within 14s
     const cursorsByEx = state.shared.cursorsByExhibit || {};
     for (const [exId, cMap] of Object.entries(cursorsByEx)) {
       if (!cMap || typeof cMap !== "object") continue;
@@ -1669,78 +1776,50 @@
     const targets = [
       {
         stack: document.getElementById("onlineAvatarsStack"),
-        num: document.getElementById("onlineUsersCountNum"),
-        popover: document.getElementById("onlineUsersPopover")
+        num: document.getElementById("onlineUsersCountNum")
       },
       {
         stack: document.getElementById("lbOnlineAvatarsStack"),
-        num: document.getElementById("lbOnlineUsersCountNum"),
-        popover: document.getElementById("lbOnlineUsersPopover")
+        num: document.getElementById("lbOnlineUsersCountNum")
       }
     ];
 
     const stackHtml = activeUsers
-      .slice(0, 8)
+      .slice(0, 6)
       .map((u, idx) => {
         const zIndex = 20 - idx;
-        const shortName = u.isSelf ? `${u.userName} (You)` : u.userName;
+        const badgeTag = u.isSelf
+          ? "YOU"
+          : u.exhibitId
+          ? u.exhibitId
+          : "";
         return `
           <div
             class="online-user-chip ${u.isSelf ? "is-self" : ""}"
             style="z-index:${zIndex};"
-            title="${escapeHtmlAttr(shortName)} — ${escapeHtmlAttr(u.locationLabel || "In Dossier")}"
+            ${u.exhibitId ? `data-jump-online-exhibit="${escapeHtmlAttr(u.exhibitId)}"` : ""}
           >
             <span class="online-user-chip-avatar">${renderAvatarHtml(u)}</span>
-            <span class="online-user-chip-name">${escapeHtml(u.userName)}</span>
+            <span class="online-user-chip-name">
+              <span>${escapeHtml(u.userName)}</span>
+              ${badgeTag ? `<span class="online-user-chip-tag">${escapeHtml(badgeTag)}</span>` : ""}
+            </span>
           </div>
         `;
       })
       .join("");
 
-    const popoverHtml = `
-      <div class="online-popover-header">
-        <span>DETECTIVES IN FILES NOW</span>
-        <span>${count} ONLINE</span>
-      </div>
-      <div class="online-popover-list">
-        ${activeUsers
-          .map(
-            (u) => `
-          <div class="online-popover-row" ${
-            u.exhibitId
-              ? `data-jump-online-exhibit="${escapeHtmlAttr(u.exhibitId)}" title="Click to jump to ${escapeHtmlAttr(u.exhibitId)}"`
-              : ""
-          }>
-            <div class="online-popover-user">
-              <span class="online-popover-avatar">${renderAvatarHtml(u)}</span>
-              <div class="online-popover-meta">
-                <span class="online-popover-name">${escapeHtml(u.userName || "Detective")}</span>
-                <span class="online-popover-loc">${escapeHtml(u.locationLabel || "In Dossier")}</span>
-              </div>
-            </div>
-            <span class="online-popover-badge">${
-              u.isSelf ? "YOU" : u.exhibitId ? escapeHtml(u.exhibitId) : "LIVE"
-            }</span>
-          </div>
-        `
-          )
-          .join("")}
-      </div>
-    `;
-
     targets.forEach((t) => {
-      if (t.num) t.num.textContent = String(count);
+      if (t.num && t.num.textContent !== String(count)) {
+        t.num.textContent = String(count);
+      }
       if (t.stack && t.stack.dataset.lastSig !== stackHtml) {
         t.stack.dataset.lastSig = stackHtml;
         t.stack.innerHTML = stackHtml;
-      }
-      if (t.popover && t.popover.dataset.lastSig !== popoverHtml) {
-        t.popover.dataset.lastSig = popoverHtml;
-        t.popover.innerHTML = popoverHtml;
-        t.popover.querySelectorAll("[data-jump-online-exhibit]").forEach((row) => {
-          row.addEventListener("click", (e) => {
+        t.stack.querySelectorAll("[data-jump-online-exhibit]").forEach((chip) => {
+          chip.addEventListener("click", (e) => {
             e.stopPropagation();
-            const exId = row.getAttribute("data-jump-online-exhibit");
+            const exId = chip.getAttribute("data-jump-online-exhibit");
             const idx = EXHIBITS.findIndex((item) => item.id === exId);
             if (idx !== -1) {
               openLightbox(idx, "saved");
@@ -1970,7 +2049,7 @@
     const grid = document.getElementById("subjectsGrid");
     if (!grid) return;
 
-    grid.innerHTML = META.subjects
+    const html = META.subjects
       .map((rawSubj, idx) => {
         const s = getEffectiveSubject(rawSubj);
         const isSelected = state.activeSubjectFilter === s.id;
@@ -2024,6 +2103,10 @@
         `;
       })
       .join("");
+
+    if (grid.dataset.lastSig === html) return;
+    grid.dataset.lastSig = html;
+    grid.innerHTML = html;
 
     grid.querySelectorAll("[data-edit-poi]").forEach((el) => {
       el.addEventListener("click", (e) => {
@@ -3568,7 +3651,10 @@
     );
 
     if (remoteEntries.length === 0) {
-      layer.innerHTML = "";
+      if (layer.dataset.lastSig !== "") {
+        layer.dataset.lastSig = "";
+        layer.innerHTML = "";
+      }
       return;
     }
 
@@ -3615,7 +3701,10 @@
         ? `<svg class="mark-pencil-svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;">${svgStrokes.join("")}</svg>`
         : "";
 
-    layer.innerHTML = `${liveSvgHtml}${cursorBadges.join("")}`;
+    const combinedHtml = `${liveSvgHtml}${cursorBadges.join("")}`;
+    if (layer.dataset.lastSig === combinedHtml) return;
+    layer.dataset.lastSig = combinedHtml;
+    layer.innerHTML = combinedHtml;
   }
 
   function setDrawMode(mode) {
@@ -3701,10 +3790,10 @@
 
   function renderSharedMarksOverlay(ex) {
     const layer = document.getElementById("sharedMarksLayer");
-    if (!layer || !ex) return;
+    if (!layer || !ex || state.activeMarkInteraction) return;
 
     const marks = state.shared.marksByExhibit[ex.id] || [];
-    layer.innerHTML = marks
+    const html = marks
       .map((m) => {
         const style = `left:${(m.x * 100).toFixed(2)}%; top:${(m.y * 100).toFixed(2)}%; width:${(m.w * 100).toFixed(2)}%; height:${(m.h * 100).toFixed(2)}%;`;
         const authorTag = `<span class="mark-author-tag">${escapeHtml(m.userName || "Detective")}</span>`;
@@ -3743,6 +3832,10 @@
         `;
       })
       .join("");
+
+    if (layer.dataset.lastSig === html) return;
+    layer.dataset.lastSig = html;
+    layer.innerHTML = html;
 
     // Delete button click
     layer.querySelectorAll("[data-delete-mark]").forEach((btn) => {
@@ -3947,9 +4040,13 @@
       }...`;
     }
     if (feedEl) {
-      feedEl.innerHTML = renderChatMessagesHtml(chats, ex.id);
-      bindChatDeleteButtons(feedEl);
-      feedEl.scrollTop = feedEl.scrollHeight;
+      const chatSig = `${ex.id}:${chats.length}:${chats[chats.length - 1]?.id || ""}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}`;
+      if (feedEl.dataset.lastSig !== chatSig) {
+        feedEl.dataset.lastSig = chatSig;
+        feedEl.innerHTML = renderChatMessagesHtml(chats, ex.id);
+        bindChatDeleteButtons(feedEl);
+        feedEl.scrollTop = feedEl.scrollHeight;
+      }
     }
   }
 
@@ -5093,12 +5190,16 @@
     // Fine-Tuned Pencil, Redact & Highlight Drawing on `#annotationCanvas`
     let lastDrawClientX = 0;
     let lastDrawClientY = 0;
+    let activeCanvasRect = null;
+    let lastRectRefreshTs = 0;
 
     canvas.addEventListener("pointerdown", (e) => {
       if (!state.drawMode || e.button !== 0) return;
       e.stopPropagation();
       resizeAnnotationCanvas();
       const rect = canvas.getBoundingClientRect();
+      activeCanvasRect = rect;
+      lastRectRefreshTs = performance.now();
       const startX = Math.max(
         0,
         Math.min(1, (e.clientX - rect.left) / rect.width)
@@ -5134,7 +5235,13 @@
       if (!state.drawMode) return;
       updateLocalCursorFollowerPosition(e.clientX, e.clientY);
 
-      const rect = canvas.getBoundingClientRect();
+      const nowPerf = performance.now();
+      if (!activeCanvasRect || (!state.isDrawingMark && nowPerf - lastRectRefreshTs > 180)) {
+        activeCanvasRect = canvas.getBoundingClientRect();
+        lastRectRefreshTs = nowPerf;
+      }
+      const rect = activeCanvasRect;
+      if (!rect || !rect.width || !rect.height) return;
       const curX = Math.max(
         0,
         Math.min(1, (e.clientX - rect.left) / rect.width)
@@ -5294,7 +5401,7 @@
       stopContinuousPenSound();
       if (!state.isDrawingMark || !state.drawMode) return;
       state.isDrawingMark = false;
-      const rect = canvas.getBoundingClientRect();
+      const rect = activeCanvasRect || canvas.getBoundingClientRect();
       const endX = Math.max(
         0,
         Math.min(1, (e.clientX - rect.left) / rect.width)
@@ -5415,7 +5522,10 @@
 
     if (broadcastChannel) {
       broadcastChannel.onmessage = (ev) => {
-        if (ev.data && ev.data.type === "STATE_SYNC" && ev.data.state) {
+        if (!ev.data) return;
+        if (ev.data.type === "EPHEMERAL_SYNC" && ev.data.delta) {
+          applyIncomingEphemeral(ev.data.delta);
+        } else if (ev.data.type === "STATE_SYNC" && ev.data.state) {
           mergeSharedState(ev.data.state);
         }
       };
@@ -5438,8 +5548,8 @@
     fetchServerState(true);
     connectLiveEventStream();
 
-    // Ultra-fast versioned sync (450ms) + 4s presence heartbeat
-    setInterval(() => fetchServerState(false), 450);
+    // Fast fallback versioned sync (700ms) + 4s presence heartbeat
+    setInterval(() => fetchServerState(false), 700);
     setInterval(sendPresenceHeartbeat, 4000);
   }
 

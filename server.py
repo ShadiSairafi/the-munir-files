@@ -81,13 +81,23 @@ def prune_stale_ephemeral(now_ms):
     return changed
 
 
-def broadcast_sse():
+def broadcast_sse(sender_id=None, ephemeral_delta=None):
     with STATE_LOCK:
-        msg_obj = {
-            "ok": True,
-            "version": SHARED_STATE["version"],
-            "state": dict(SHARED_STATE),
-        }
+        if ephemeral_delta is not None:
+            msg_obj = {
+                "ok": True,
+                "version": SHARED_STATE["version"],
+                "senderId": sender_id,
+                "ephemeral": True,
+                "delta": ephemeral_delta,
+            }
+        else:
+            msg_obj = {
+                "ok": True,
+                "version": SHARED_STATE["version"],
+                "senderId": sender_id,
+                "state": dict(SHARED_STATE),
+            }
         payload = f"data: {json.dumps(msg_obj)}\n\n".encode("utf-8")
 
     with SSE_LOCK:
@@ -372,13 +382,23 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
             if persist_needed:
                 save_persisted_state()
 
-            resp_bytes = json.dumps({
-                "ok": True,
-                "version": SHARED_STATE["version"],
-                "state": SHARED_STATE,
-            }).encode("utf-8")
+            is_ephemeral = action in ("presence_ping", "presence_leave", "cursor_update", "cursor_leave")
+            if is_ephemeral:
+                resp_bytes = json.dumps({
+                    "ok": True,
+                    "version": SHARED_STATE["version"],
+                }).encode("utf-8")
+            else:
+                resp_bytes = json.dumps({
+                    "ok": True,
+                    "version": SHARED_STATE["version"],
+                    "state": SHARED_STATE,
+                }).encode("utf-8")
 
-        broadcast_sse()
+        broadcast_sse(
+            sender_id=user_id,
+            ephemeral_delta=payload if is_ephemeral else None,
+        )
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")

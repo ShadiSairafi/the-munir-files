@@ -4042,24 +4042,44 @@ dialog.compact-modal::backdrop {
 }
 
 /* ==========================================================================
-   LIVE STACKED ONLINE USERS CLUSTER (TOP COMMAND BAR & LIGHT-TABLE HEADER)
+   LIVE STACKED ONLINE USERS CLUSTER (TOP-RIGHT COMMAND BAR & LIGHT-TABLE)
    ========================================================================== */
+.command-bar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+  flex: 1 1 340px;
+  max-width: 680px;
+}
+
+.command-bar-right .search-box-wrapper {
+  flex: 1 1 240px;
+  max-width: 430px;
+}
+
 .online-users-cluster {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 3px 8px 3px 6px;
-  background: linear-gradient(135deg, rgba(28, 25, 21, 0.96) 0%, rgba(18, 16, 13, 0.98) 100%);
-  border: 1px solid #443c30;
-  border-radius: 999px;
+  padding: 4px 8px 4px 5px;
+  background: linear-gradient(135deg, #211d18 0%, #15120f 100%);
+  border: 1px solid #453c31;
+  border-radius: 10px;
   cursor: pointer;
   user-select: none;
+  flex-shrink: 0;
+  max-width: 520px;
+  overflow: hidden;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   transition:
-    background-color 0.24s ease,
-    border-color 0.24s ease,
-    box-shadow 0.24s ease,
-    padding 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    background-color 0.22s ease;
   z-index: 60;
 }
 
@@ -4067,19 +4087,20 @@ dialog.compact-modal::backdrop {
 .online-users-cluster:focus-within {
   border-color: var(--manila-base);
   box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.72),
-    0 0 0 1px rgba(230, 207, 167, 0.24);
-  padding-right: 10px;
+    0 6px 18px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(230, 207, 167, 0.22);
 }
 
 .online-users-cluster.is-lightbox-cluster {
-  margin-left: 8px;
+  margin-left: 4px;
+  margin-right: 2px;
 }
 
 .online-avatars-stack {
   display: inline-flex;
   align-items: center;
-  padding-left: 2px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .online-user-chip {
@@ -4087,18 +4108,19 @@ dialog.compact-modal::backdrop {
   display: inline-flex;
   align-items: center;
   height: 26px;
-  border-radius: 999px;
+  padding: 2px;
+  border-radius: 7px;
   background: #181511;
-  border: 1.5px solid #e6cfa7;
+  border: 1.5px solid #d6bf97;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
-  margin-left: -9px;
-  transition:
-    margin-left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.2s ease,
-    background-color 0.2s ease;
+  margin-left: -8px;
+  box-sizing: border-box;
   overflow: hidden;
   flex-shrink: 0;
+  transition:
+    margin-left 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .online-user-chip:first-child {
@@ -4112,7 +4134,7 @@ dialog.compact-modal::backdrop {
 .online-users-cluster:hover .online-user-chip,
 .online-users-cluster:focus-within .online-user-chip {
   margin-left: 5px;
-  background: #231f19;
+  background: #221e18;
 }
 
 .online-users-cluster:hover .online-user-chip:first-child,
@@ -4120,15 +4142,10 @@ dialog.compact-modal::backdrop {
   margin-left: 0;
 }
 
-.online-user-chip:hover {
-  transform: translateY(-2px);
-  z-index: 10 !important;
-}
-
 .online-user-chip-avatar {
-  width: 23px;
-  height: 23px;
-  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
   overflow: hidden;
   flex-shrink: 0;
   display: inline-flex;
@@ -4142,32 +4159,47 @@ dialog.compact-modal::backdrop {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 50%;
+  border-radius: 4.5px;
   display: block;
 }
 
 .online-user-chip-name {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.66rem;
   font-weight: 700;
-  color: #f6efe0;
+  color: #faf5e8;
   white-space: nowrap;
   max-width: 0;
   opacity: 0;
   padding: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   transition:
-    max-width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.22s ease,
-    padding 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    max-width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease,
+    padding 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .online-users-cluster:hover .online-user-chip-name,
 .online-users-cluster:focus-within .online-user-chip-name {
-  max-width: 125px;
+  max-width: 165px;
   opacity: 1;
-  padding: 0 7px 0 5px;
+  padding: 0 6px 0 6px;
+}
+
+.online-user-chip-tag {
+  font-size: 0.54rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
 }
 
 .online-count-badge {
@@ -4175,23 +4207,23 @@ dialog.compact-modal::backdrop {
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  color: #f6efe0;
+  color: #faf5e8;
   background: rgba(34, 197, 94, 0.14);
   border: 1px solid rgba(34, 197, 94, 0.45);
-  padding: 2px 7px;
-  border-radius: 999px;
+  padding: 3px 8px;
+  border-radius: 6px;
   line-height: 1.1;
   flex-shrink: 0;
 }
 
 .online-live-dot {
-  width: 7px;
-  height: 7px;
+  width: 6.5px;
+  height: 6.5px;
   border-radius: 50%;
   background: #22c55e;
-  box-shadow: 0 0 8px #22c55e;
+  box-shadow: 0 0 7px #22c55e;
   animation: onlineDotPulse 1.8s infinite ease-in-out;
   flex-shrink: 0;
 }
@@ -4207,142 +4239,4 @@ dialog.compact-modal::backdrop {
   }
 }
 
-/* Hover Popover Card Listing All Active Users & Their Current File/Location */
-.online-users-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 245px;
-  max-width: 310px;
-  background: linear-gradient(180deg, #1e1a15 0%, #14110e 100%);
-  border: 1px solid #524739;
-  border-radius: 10px;
-  padding: 10px;
-  box-shadow:
-    0 16px 38px rgba(0, 0, 0, 0.88),
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-6px) scale(0.97);
-  transition:
-    opacity 0.2s ease,
-    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    visibility 0.2s ease;
-  pointer-events: none;
-  z-index: 120;
-}
-
-.online-users-cluster.is-lightbox-cluster .online-users-popover {
-  left: 0;
-  right: auto;
-}
-
-.online-users-cluster:hover .online-users-popover,
-.online-users-cluster:focus-within .online-users-popover {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
-.online-popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  font-weight: 800;
-  color: var(--manila-base);
-  letter-spacing: 0.05em;
-  border-bottom: 1px dashed #3b3328;
-  padding-bottom: 6px;
-  margin-bottom: 7px;
-}
-
-.online-popover-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-height: 230px;
-  overflow-y: auto;
-}
-
-.online-popover-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 7px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: background-color 0.16s ease, border-color 0.16s ease;
-}
-
-.online-popover-row:hover {
-  background: rgba(230, 207, 167, 0.08);
-  border-color: rgba(230, 207, 167, 0.24);
-}
-
-.online-popover-user {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-
-.online-popover-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  overflow: hidden;
-  border: 1.5px solid #e6cfa7;
-  flex-shrink: 0;
-  background: #12100d;
-}
-
-.online-popover-avatar img,
-.online-popover-avatar svg {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.online-popover-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.online-popover-name {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  font-weight: 800;
-  color: #faf5e8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.online-popover-loc {
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  color: #a89f91;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.online-popover-badge {
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  font-weight: 800;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: rgba(34, 197, 94, 0.16);
-  color: #4ade80;
-  border: 1px solid rgba(34, 197, 94, 0.35);
-  flex-shrink: 0;
-}
 
