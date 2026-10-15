@@ -609,20 +609,23 @@
 
           <div class="page-chat-feed" id="lbChatFeed"></div>
 
-          <form class="page-chat-form" id="lbChatForm">
-            <input
-              type="text"
-              id="lbChatInput"
-              class="page-chat-input"
-              placeholder="Write a comment on this exhibit..."
-              maxlength="400"
-              required
-            />
-            <button type="submit" class="tool-btn is-active">
-              <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              <span>Send</span>
-            </button>
-          </form>
+          <div class="chat-composer-shell">
+            <div id="lbChatReplyBanner" class="chat-reply-banner" hidden></div>
+            <form class="page-chat-form" id="lbChatForm">
+              <input
+                type="text"
+                id="lbChatInput"
+                class="page-chat-input"
+                placeholder="Write a comment on this exhibit..."
+                maxlength="400"
+                required
+              />
+              <button type="submit" class="tool-btn is-active">
+                <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span>Send</span>
+              </button>
+            </form>
+          </div>
         </div>
 
         <!-- TAB 3: Live Entries & Edits Log inside Sidebar -->

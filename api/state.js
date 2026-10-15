@@ -323,6 +323,7 @@ module.exports = async function handler(req, res) {
         avatarId,
         customAvatarUrl,
         text: String(payload.text || "").trim().slice(0, 400),
+        replyTo: payload.replyTo || null,
         ts: now
       };
       if (!store.deletedIds[msg.id] && !store.chatsByExhibit[exhibitId].some((c) => c && c.id === msg.id)) {

@@ -356,6 +356,7 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                     "avatarId": avatar_id,
                     "customAvatarUrl": custom_avatar_url,
                     "text": text,
+                    "replyTo": payload.get("replyTo") or None,
                     "ts": now_ms,
                 }
                 if msg.get("id") not in SHARED_STATE["deletedIds"] and not any(

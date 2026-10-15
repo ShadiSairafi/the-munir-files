@@ -350,7 +350,8 @@
     activeMarkInteraction: null,
     imageFilter: "none",
     sidebarVisible: true,
-    autoplayTimer: null
+    autoplayTimer: null,
+    replyingToChat: null
   };
 
   const broadcastChannel =
@@ -491,7 +492,7 @@
 
       const lowpass = ctx.createBiquadFilter();
       lowpass.type = "lowpass";
-      lowpass.frequency.setValueAtTime(1120, ctx.currentTime);
+      lowpass.frequency.setValueAtTime(1360, ctx.currentTime);
 
       const gainNode = ctx.createGain();
       // Start completely silent until the pen actually moves across the paper
@@ -516,9 +517,9 @@
     }
     try {
       const speed = Math.max(0, Math.min(36, moveDistPx));
-      // Subtle, soft graphite-on-manila-paper whisper (2% to 6.5% max gain)
-      const targetVol = Math.min(0.065, 0.015 + speed * 0.0014);
-      const targetFreq = Math.min(740, 460 + speed * 7.5);
+      // Warm, clearly audible graphite-on-manila-paper friction (3.6% to 14.5% max gain)
+      const targetVol = Math.min(0.145, 0.036 + speed * 0.003);
+      const targetFreq = Math.min(780, 480 + speed * 8.0);
 
       if (activePenGain && audioCtx) {
         const now = audioCtx.currentTime;
@@ -1633,6 +1634,7 @@
         avatarId,
         customAvatarUrl,
         text: payload.text.trim(),
+        replyTo: payload.replyTo || null,
         ts: now
       };
       state.shared.chatsByExhibit[exhibitId].push(msg);
@@ -1644,7 +1646,9 @@
         avatarId,
         customAvatarUrl,
         exhibitId,
-        detail: `Commented on ${exhibitId}: "${msg.text.slice(0, 70)}"`,
+        detail: msg.replyTo
+          ? `Replied to ${msg.replyTo.userName || "Detective"} on ${exhibitId}: "${msg.text.slice(0, 70)}"`
+          : `Commented on ${exhibitId}: "${msg.text.slice(0, 70)}"`,
         ts: now
       };
       state.shared.auditLog.unshift(auditEntry);
@@ -2774,20 +2778,23 @@
           ${renderChatMessagesHtml(chats, ex.id)}
         </div>
 
-        <form class="page-chat-form" ${includeIds ? 'id="binderChatForm"' : ""}>
-          <input
-            type="text"
-            ${includeIds ? 'id="binderChatInput"' : ""}
-            class="page-chat-input"
-            placeholder="Comment on ${escapeHtmlAttr(ex.id)} as ${escapeHtmlAttr(state.userProfile?.name || "Detective")}..."
-            maxlength="400"
-            required
-          />
-          <button type="submit" class="tool-btn is-active">
-            ${ICON("send", "icon-sm")}
-            <span>Send</span>
-          </button>
-        </form>
+        <div class="chat-composer-shell">
+          <div class="chat-reply-banner" ${includeIds ? 'id="binderChatReplyBanner"' : ""} hidden></div>
+          <form class="page-chat-form" ${includeIds ? 'id="binderChatForm"' : ""}>
+            <input
+              type="text"
+              ${includeIds ? 'id="binderChatInput"' : ""}
+              class="page-chat-input"
+              placeholder="Comment on ${escapeHtmlAttr(ex.id)} as ${escapeHtmlAttr(state.userProfile?.name || "Detective")}..."
+              maxlength="400"
+              required
+            />
+            <button type="submit" class="tool-btn is-active">
+              ${ICON("send", "icon-sm")}
+              <span>Send</span>
+            </button>
+          </form>
+        </div>
       </div>
 
       ${
@@ -2882,6 +2889,7 @@
 
     bindExhibitCardEvents(mount);
     bindChatDeleteButtons(mount);
+    updateChatReplyBanners(ex.id);
 
     document
       .getElementById("binderPrevBtn")
@@ -4170,9 +4178,9 @@
   function renderChatMessagesHtml(chats, exhibitId) {
     if (!chats || chats.length === 0) {
       return `
-        <div style="text-align:center; padding:18px 10px; color:#8c8273; font-family:var(--font-mono); font-size:0.74rem;">
-          No detective notes in the <strong>${escapeHtml(exhibitId)}</strong> chat room yet.<br/>
-          Be the first investigator to drop a comment on this page!
+        <div class="chat-empty-state">
+          <div class="chat-empty-stamp">ENCRYPTED CHANNEL READY</div>
+          <div>No field transmissions in <strong>${escapeHtml(exhibitId)}</strong> yet.<br/>Drop a forensic observation or reply below.</div>
         </div>
       `;
     }
@@ -4186,14 +4194,40 @@
           Boolean(myId && m.userId && m.userId === myId) ||
           Boolean(myName && m.userName && m.userName === myName);
 
+        const roleBadge = isMine
+          ? `<span class="chat-role-pill is-you">YOU</span>`
+          : `<span class="chat-role-pill is-agent">AGENT</span>`;
+
+        const quotedHtml =
+          m.replyTo && (m.replyTo.text || m.replyTo.userName)
+            ? `
+              <div class="chat-quoted-reply" data-jump-chat-id="${escapeHtmlAttr(m.replyTo.id || "")}" title="Jump to original message">
+                <span class="chat-quoted-author">↩ ${escapeHtml(m.replyTo.userName || "Detective")}</span>
+                <span class="chat-quoted-text">${escapeHtml(m.replyTo.text || "")}</span>
+              </div>
+            `
+            : "";
+
         return `
-        <div class="chat-msg-item ${isMine ? "is-own-msg" : ""}">
-          <span class="detective-avatar-frame">${renderAvatarHtml(m)}</span>
+        <div class="chat-msg-item ${isMine ? "is-own-msg" : "is-other-msg"}" data-chat-msg-id="${escapeHtmlAttr(m.id || "")}">
+          <span class="detective-avatar-frame chat-avatar-pill">${renderAvatarHtml(m)}</span>
           <div class="chat-msg-body">
             <div class="chat-msg-header">
-              <span class="chat-msg-author">${escapeHtml(m.userName || "Detective")}${isMine ? " (You)" : ""}</span>
+              <span class="chat-msg-author-wrap">
+                <span class="chat-msg-author">${escapeHtml(m.userName || "Detective")}</span>
+                ${roleBadge}
+              </span>
               <span class="chat-msg-meta-right">
                 <span class="chat-msg-time">${escapeHtml(formatRelativeTime(m.ts))}</span>
+                <button
+                  type="button"
+                  class="chat-reply-btn"
+                  data-reply-chat="${escapeHtmlAttr(m.id || "")}"
+                  data-reply-author="${escapeHtmlAttr(m.userName || "Detective")}"
+                  data-reply-text="${escapeHtmlAttr((m.text || "").slice(0, 110))}"
+                  data-chat-exhibit="${escapeHtmlAttr(exhibitId)}"
+                  title="Reply to ${escapeHtmlAttr(m.userName || "Detective")}"
+                >↩ Reply</button>
                 ${
                   isMine && m.id
                     ? `<button type="button" class="chat-delete-btn" data-delete-chat="${escapeHtmlAttr(m.id)}" data-chat-exhibit="${escapeHtmlAttr(exhibitId)}" title="Delete your message">×</button>`
@@ -4201,12 +4235,51 @@
                 }
               </span>
             </div>
+            ${quotedHtml}
             <div class="chat-msg-text">${escapeHtml(m.text)}</div>
           </div>
         </div>
       `;
       })
       .join("");
+  }
+
+  function updateChatReplyBanners(activeExhibitId) {
+    const r = state.replyingToChat;
+    const banners = [
+      {
+        banner: document.getElementById("lbChatReplyBanner"),
+        input: document.getElementById("lbChatInput")
+      },
+      {
+        banner: document.getElementById("binderChatReplyBanner"),
+        input: document.getElementById("binderChatInput")
+      }
+    ];
+
+    banners.forEach(({ banner }) => {
+      if (!banner) return;
+      if (!r || (activeExhibitId && r.exhibitId !== activeExhibitId)) {
+        banner.hidden = true;
+        banner.innerHTML = "";
+        return;
+      }
+      banner.hidden = false;
+      banner.innerHTML = `
+        <div class="chat-reply-banner-info">
+          <span class="chat-reply-banner-tag">↩ REPLYING TO ${escapeHtml(r.userName || "Detective")}</span>
+          <span class="chat-reply-banner-snippet">"${escapeHtml(r.text || "")}"</span>
+        </div>
+        <button type="button" class="chat-reply-cancel-btn" data-cancel-reply title="Cancel reply">×</button>
+      `;
+      banner
+        .querySelector("[data-cancel-reply]")
+        ?.addEventListener("click", () => {
+          playForensicSound("click");
+          state.replyingToChat = null;
+          updateChatReplyBanners(activeExhibitId);
+        });
+    });
   }
 
   function bindChatDeleteButtons(container) {
@@ -4218,6 +4291,10 @@
         const exhibitId = btn.getAttribute("data-chat-exhibit");
         if (!messageId || !exhibitId || !state.userProfile) return;
         playForensicSound("click");
+        if (state.replyingToChat && state.replyingToChat.id === messageId) {
+          state.replyingToChat = null;
+          updateChatReplyBanners(exhibitId);
+        }
         dispatchSharedAction({
           action: "delete_chat_message",
           exhibitId,
@@ -4229,6 +4306,45 @@
         });
       });
     });
+
+    container.querySelectorAll("[data-reply-chat]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute("data-reply-chat") || "";
+        const userName = btn.getAttribute("data-reply-author") || "Detective";
+        const text = btn.getAttribute("data-reply-text") || "";
+        const exhibitId = btn.getAttribute("data-chat-exhibit") || "";
+        playForensicSound("click");
+        state.replyingToChat = { id, userName, text, exhibitId };
+        updateChatReplyBanners(exhibitId);
+        const targetInput =
+          container.id === "binderChatFeed" || container.closest("#binderPageRight")
+            ? document.getElementById("binderChatInput")
+            : document.getElementById("lbChatInput");
+        targetInput?.focus();
+      });
+    });
+
+    container.querySelectorAll("[data-jump-chat-id]").forEach((quoteEl) => {
+      quoteEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const targetId = quoteEl.getAttribute("data-jump-chat-id");
+        if (!targetId) return;
+        const targetMsg = container.querySelector(
+          `[data-chat-msg-id="${CSS.escape(targetId)}"]`
+        );
+        if (targetMsg) {
+          playForensicSound("click");
+          targetMsg.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          targetMsg.classList.remove("is-highlighted-msg");
+          void targetMsg.offsetWidth;
+          targetMsg.classList.add("is-highlighted-msg");
+          setTimeout(() => {
+            targetMsg.classList.remove("is-highlighted-msg");
+          }, 1400);
+        }
+      });
+    });
   }
 
   function renderLightboxChat(ex) {
@@ -4237,12 +4353,21 @@
     const feedEl = document.getElementById("lbChatFeed");
     const inputEl = document.getElementById("lbChatInput");
 
+    if (
+      state.replyingToChat &&
+      state.replyingToChat.exhibitId &&
+      state.replyingToChat.exhibitId !== ex.id
+    ) {
+      state.replyingToChat = null;
+    }
+    updateChatReplyBanners(ex.id);
+
     const chats = state.shared.chatsByExhibit[ex.id] || [];
     if (titleEl)
       titleEl.textContent = `${ex.id} DISCUSSION ROOM (${chats.length})`;
     if (badgeEl) badgeEl.textContent = String(chats.length);
     if (inputEl) {
-      inputEl.placeholder = `Chat on ${ex.id} as ${
+      inputEl.placeholder = `Message ${ex.id} channel as ${
         state.userProfile?.name || "Detective"
       }...`;
     }
@@ -4260,10 +4385,22 @@
   function submitPageChatMessage(exhibitId, text) {
     if (!text || !exhibitId) return;
     playForensicSound("chat");
+    const replyTo =
+      state.replyingToChat && state.replyingToChat.exhibitId === exhibitId
+        ? {
+            id: state.replyingToChat.id,
+            userName: state.replyingToChat.userName,
+            text: state.replyingToChat.text
+          }
+        : null;
+    state.replyingToChat = null;
+    updateChatReplyBanners(exhibitId);
+
     dispatchSharedAction({
       action: "chat_message",
       exhibitId,
       text,
+      replyTo,
       userId: state.userProfile.id,
       userName: state.userProfile.name,
       avatarId: state.userProfile.avatarId,
