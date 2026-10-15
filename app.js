@@ -3768,11 +3768,15 @@
     const rectEl = document.getElementById("lbMiniMapRect");
     if (!miniMap || !rectEl) return;
 
+    miniMap.hidden = false;
+
     if (state.zoomLevel <= 1.04) {
-      miniMap.hidden = true;
+      rectEl.style.height = "100%";
+      rectEl.style.width = "100%";
+      rectEl.style.top = "0%";
+      rectEl.style.left = "0%";
       return;
     }
-    miniMap.hidden = false;
 
     const { maxPanX, maxPanY } = getPanLimits();
     const visibleHeightPct = Math.max(
@@ -3806,6 +3810,9 @@
   function scrubMiniMapFromPointer(e) {
     const track = document.getElementById("lbMiniMapTrack");
     if (!track) return;
+    if (state.zoomLevel <= 1.04) {
+      state.zoomLevel = 1.65;
+    }
     const rect = track.getBoundingClientRect();
     const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
     const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -5736,7 +5743,35 @@
       });
     }
 
-    // Mini-Map Radar Scrubbing
+    // Mini-Map Radar Scrubbing & Left-Edge Drawer Toggle
+    const miniMapEl = document.getElementById("lbMiniMap");
+    const miniMapToggleBtn = document.getElementById("lbMiniMapToggleBtn");
+    const miniMapChevron = document.getElementById("lbMiniMapChevron");
+    if (miniMapEl && miniMapToggleBtn) {
+      const savedRadarCollapsed =
+        localStorage.getItem("munir_radar_drawer_collapsed") === "1";
+      miniMapEl.classList.toggle("is-collapsed", savedRadarCollapsed);
+      if (miniMapChevron) {
+        miniMapChevron.textContent = savedRadarCollapsed ? "▸" : "◂";
+      }
+      miniMapToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        playForensicSound("click");
+        const collapsed = miniMapEl.classList.toggle("is-collapsed");
+        if (miniMapChevron) {
+          miniMapChevron.textContent = collapsed ? "▸" : "◂";
+        }
+        try {
+          localStorage.setItem(
+            "munir_radar_drawer_collapsed",
+            collapsed ? "1" : "0"
+          );
+        } catch (_err) {
+          // ignore storage quota errors
+        }
+      });
+    }
+
     const miniMapTrack = document.getElementById("lbMiniMapTrack");
     if (miniMapTrack) {
       miniMapTrack.addEventListener("pointerdown", (e) => {
@@ -5757,7 +5792,35 @@
       miniMapTrack.addEventListener("pointercancel", stopMiniMapScrub);
     }
 
-    // On-screen Pan Pad
+    // On-screen Pan Pad & Right-Edge Drawer Toggle
+    const panPadEl = document.getElementById("lbPanPad");
+    const panPadToggleBtn = document.getElementById("lbPanPadToggleBtn");
+    const panPadChevron = document.getElementById("lbPanPadChevron");
+    if (panPadEl && panPadToggleBtn) {
+      const savedPanCollapsed =
+        localStorage.getItem("munir_pan_drawer_collapsed") === "1";
+      panPadEl.classList.toggle("is-collapsed", savedPanCollapsed);
+      if (panPadChevron) {
+        panPadChevron.textContent = savedPanCollapsed ? "◂" : "▸";
+      }
+      panPadToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        playForensicSound("click");
+        const collapsed = panPadEl.classList.toggle("is-collapsed");
+        if (panPadChevron) {
+          panPadChevron.textContent = collapsed ? "◂" : "▸";
+        }
+        try {
+          localStorage.setItem(
+            "munir_pan_drawer_collapsed",
+            collapsed ? "1" : "0"
+          );
+        } catch (_err) {
+          // ignore storage quota errors
+        }
+      });
+    }
+
     document.getElementById("panTopBtn")?.addEventListener("click", () => {
       playForensicSound("click");
       jumpToVerticalEdge("top");
@@ -6527,7 +6590,26 @@
   // ============================================================================
   // BOOTSTRAP APPLICATION
   // ============================================================================
+  function forceApplyFavicon() {
+    const dataLink = document.getElementById("siteFaviconData");
+    const href = dataLink?.getAttribute("href");
+    if (!href) return;
+    document
+      .querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
+      .forEach((el) => {
+        if (el !== dataLink) el.remove();
+      });
+    // Re-append a fresh <link rel="icon"> so Firefox/Zen Browser immediately refreshes the tab icon
+    const fresh = document.createElement("link");
+    fresh.rel = "icon";
+    fresh.type = "image/png";
+    fresh.sizes = "64x64";
+    fresh.href = href;
+    document.head.appendChild(fresh);
+  }
+
   function init() {
+    forceApplyFavicon();
     resetFolderStraight();
     bindGlobalEvents();
     loadLocalStorageState();
