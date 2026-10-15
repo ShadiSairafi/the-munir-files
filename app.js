@@ -355,10 +355,13 @@
     replyingToChat: null,
     pendingChatMediaUrl: null,
     gifDrawerOpen: false,
+    emojiDrawerOpen: false,
     globalChatDrawerOpen: false,
     activeGifCategory: "unhinged",
     gifSearchQuery: "",
-    gifRemoteResults: null
+    gifRemoteResults: null,
+    activeEmojiCategory: "hype",
+    emojiSearchQuery: ""
   };
 
   const broadcastChannel =
@@ -1232,6 +1235,15 @@
         }
       }
     }
+    if (fromServer && state.shared.deletedIds) {
+      const incDel = incoming.deletedIds || {};
+      for (const [delId, localDelTs] of Object.entries(state.shared.deletedIds)) {
+        if (!incDel[delId] || (Number(localDelTs) || 1) > (Number(incDel[delId]) || 0)) {
+          serverMissingLocalData = true;
+          break;
+        }
+      }
+    }
 
     // 2. Merge per-exhibit clear timestamps
     if (
@@ -1243,6 +1255,15 @@
         const incTs = Number(clrTs) || 0;
         if (incTs > curTs) {
           state.shared.clearedAtByExhibit[exId] = incTs;
+        }
+      }
+    }
+    if (fromServer && state.shared.clearedAtByExhibit) {
+      const incClr = incoming.clearedAtByExhibit || {};
+      for (const [exId, localClrTs] of Object.entries(state.shared.clearedAtByExhibit)) {
+        if ((Number(localClrTs) || 0) > (Number(incClr[exId]) || 0)) {
+          serverMissingLocalData = true;
+          break;
         }
       }
     }
@@ -1277,7 +1298,11 @@
       );
       state.shared.chatsByExhibit[exId] = mergedArr;
 
-      if (fromServer && mergedArr.some((c) => !incIdSet.has(c.id))) {
+      if (
+        fromServer &&
+        (mergedArr.some((c) => !incIdSet.has(c.id)) ||
+          incList.some((c) => c && c.id && state.shared.deletedIds[c.id]))
+      ) {
         serverMissingLocalData = true;
       }
     }
@@ -1316,7 +1341,17 @@
       );
       state.shared.marksByExhibit[exId] = mergedArr;
 
-      if (fromServer && mergedArr.some((m) => !incIdSet.has(m.id))) {
+      if (
+        fromServer &&
+        (mergedArr.some((m) => !incIdSet.has(m.id)) ||
+          incList.some(
+            (m) =>
+              m &&
+              m.id &&
+              (state.shared.deletedIds[m.id] ||
+                (clearedAt > 0 && (m.ts || 0) <= clearedAt))
+          ))
+      ) {
         serverMissingLocalData = true;
       }
     }
@@ -1952,7 +1987,9 @@
       avatarId: state.userProfile.avatarId,
       customAvatarUrl: state.userProfile.customAvatarUrl,
       exhibitId: loc.exhibitId,
-      locationLabel: loc.locationLabel
+      locationLabel: loc.locationLabel,
+      deletedIds: state.shared.deletedIds || {},
+      clearedAtByExhibit: state.shared.clearedAtByExhibit || {}
     });
   }
 
@@ -2821,6 +2858,7 @@
           <div class="chat-reply-banner" ${includeIds ? 'id="binderChatReplyBanner"' : ""} hidden></div>
           <div class="chat-media-preview" ${includeIds ? 'id="binderChatMediaPreview"' : ""} hidden></div>
           <div class="chat-gif-drawer" ${includeIds ? 'id="binderGifPickerDrawer"' : ""} hidden></div>
+          <div class="chat-emoji-drawer" ${includeIds ? 'id="binderEmojiPickerDrawer"' : ""} hidden></div>
           <form class="page-chat-form" ${includeIds ? 'id="binderChatForm"' : ""} autocomplete="off">
             <input
               type="file"
@@ -2835,6 +2873,14 @@
               title="Upload Picture or GIF"
             >
               <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </button>
+            <button
+              type="button"
+              class="tool-btn chat-emoji-btn"
+              ${includeIds ? 'id="binderChatEmojiBtn"' : ""}
+              title="Open Emoji Library (Quick PC Emoji Picker)"
+            >
+              <span>😀</span>
             </button>
             <button
               type="button"
@@ -2999,6 +3045,7 @@
 
     updateChatMediaPreviews();
     renderGifPickerDrawers();
+    renderEmojiPickerDrawers();
 
     document
       .getElementById("binderChatUploadBtn")
@@ -3016,10 +3063,22 @@
       });
 
     document
+      .getElementById("binderChatEmojiBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        state.emojiDrawerOpen = !state.emojiDrawerOpen;
+        if (state.emojiDrawerOpen) state.gifDrawerOpen = false;
+        renderGifPickerDrawers();
+        renderEmojiPickerDrawers();
+      });
+
+    document
       .getElementById("binderChatGifBtn")
       ?.addEventListener("click", () => {
         playForensicSound("click");
         state.gifDrawerOpen = !state.gifDrawerOpen;
+        if (state.gifDrawerOpen) state.emojiDrawerOpen = false;
+        renderEmojiPickerDrawers();
         renderGifPickerDrawers();
       });
 
@@ -4942,6 +5001,436 @@
     }
   }
 
+  // ============================================================================
+  // QUICK PC EMOJI LIBRARY DRAWER (SEARCHABLE & CATEGORIZED)
+  // ============================================================================
+  const EMOJI_LIBRARY_BY_CATEGORY = {
+    hype: [
+      { char: "💀", tags: "skull dead dying laugh rip" },
+      { char: "😭", tags: "cry sobbing tears laughing" },
+      { char: "😂", tags: "joy laugh tears" },
+      { char: "🤣", tags: "rofl rolling laughing" },
+      { char: "🔥", tags: "fire lit hot" },
+      { char: "🤡", tags: "clown circus" },
+      { char: "🗿", tags: "moai stone chad bruh" },
+      { char: "🗣️", tags: "speaking facts loud" },
+      { char: "💯", tags: "100 hundred facts" },
+      { char: "👀", tags: "eyes looking sus" },
+      { char: "🫡", tags: "salute respect sir" },
+      { char: "🤨", tags: "raised eyebrow rock sus" },
+      { char: "📸", tags: "camera caught in 4k" },
+      { char: "🚨", tags: "siren alarm police emergency" },
+      { char: "🧢", tags: "cap lie no cap" },
+      { char: "🐐", tags: "goat greatest" },
+      { char: "👑", tags: "crown king queen" },
+      { char: "💔", tags: "broken heart" },
+      { char: "🙏", tags: "pray please thank you" },
+      { char: "🥶", tags: "cold freezing" },
+      { char: "🥵", tags: "hot sweating" },
+      { char: "🤓", tags: "nerd glasses" },
+      { char: "😈", tags: "devil evil grin" },
+      { char: "👻", tags: "ghost boo" },
+      { char: "💩", tags: "poop trash" },
+      { char: "🙈", tags: "see no evil monkey" },
+      { char: "🙉", tags: "hear no evil monkey" },
+      { char: "🙊", tags: "speak no evil monkey" },
+      { char: "💥", tags: "boom explosion" },
+      { char: "⚡", tags: "lightning zap" },
+      { char: "💣", tags: "bomb" },
+      { char: "💤", tags: "sleep zzz" }
+    ],
+    faces: [
+      { char: "😀", tags: "grin happy smile" },
+      { char: "😃", tags: "smiley happy" },
+      { char: "😄", tags: "smile laugh" },
+      { char: "😁", tags: "beaming grin" },
+      { char: "😆", tags: "xd squinting laugh" },
+      { char: "😅", tags: "sweat smile nervous" },
+      { char: "🙂", tags: "slight smile" },
+      { char: "🙃", tags: "upside down" },
+      { char: "😉", tags: "wink" },
+      { char: "😊", tags: "blush happy" },
+      { char: "😇", tags: "angel halo innocent" },
+      { char: "🥰", tags: "love hearts smile" },
+      { char: "😍", tags: "heart eyes love" },
+      { char: "🤩", tags: "star struck" },
+      { char: "😘", tags: "kiss blow" },
+      { char: "😋", tags: "yum tongue" },
+      { char: "😜", tags: "wink tongue crazy" },
+      { char: "🤪", tags: "zany goofy" },
+      { char: "🤑", tags: "money rich" },
+      { char: "🤗", tags: "hug" },
+      { char: "🤭", tags: "giggle cover mouth" },
+      { char: "🫢", tags: "gasp shock" },
+      { char: "🫣", tags: "peeking" },
+      { char: "🤫", tags: "shh quiet secret" },
+      { char: "🤔", tags: "thinking hmm" },
+      { char: "🤐", tags: "zipper mouth" },
+      { char: "😐", tags: "neutral straight face" },
+      { char: "😑", tags: "expressionless" },
+      { char: "😶", tags: "no mouth speechless" },
+      { char: "😏", tags: "smirk" },
+      { char: "😒", tags: "unamused side eye" },
+      { char: "🙄", tags: "eye roll" },
+      { char: "😬", tags: "grimace awkward" },
+      { char: "😮‍💨", tags: "exhale sigh" },
+      { char: "🤥", tags: "lying pinocchio" },
+      { char: "😌", tags: "relieved" },
+      { char: "😔", tags: "pensive sad" },
+      { char: "😪", tags: "sleepy" },
+      { char: "🤤", tags: "drooling" },
+      { char: "😴", tags: "sleeping" },
+      { char: "😷", tags: "mask sick" },
+      { char: "🤒", tags: "thermometer sick" },
+      { char: "🤕", tags: "bandage hurt" },
+      { char: "🤢", tags: "nauseated green" },
+      { char: "🤮", tags: "vomit puke" },
+      { char: "🤧", tags: "sneeze" },
+      { char: "😵", tags: "dizzy" },
+      { char: "😵‍💫", tags: "spiral eyes" },
+      { char: "🤯", tags: "mind blown exploding head" },
+      { char: "🤠", tags: "cowboy" },
+      { char: "🥳", tags: "party celebrate" },
+      { char: "😎", tags: "cool sunglasses" },
+      { char: "🧐", tags: "monocle inspect" },
+      { char: "😕", tags: "confused" },
+      { char: "😟", tags: "worried" },
+      { char: "🙁", tags: "frown" },
+      { char: "😮", tags: "open mouth wow" },
+      { char: "😯", tags: "hushed" },
+      { char: "😲", tags: "astonished shocked" },
+      { char: "😳", tags: "flushed embarrassed" },
+      { char: "🥺", tags: "pleading puppy eyes" },
+      { char: "🥹", tags: "holding back tears" },
+      { char: "😦", tags: "frowning" },
+      { char: "😧", tags: "anguished" },
+      { char: "😨", tags: "fearful scared" },
+      { char: "😰", tags: "anxious sweat" },
+      { char: "😥", tags: "sad relief" },
+      { char: "😢", tags: "crying tear" },
+      { char: "😱", tags: "scream shock" },
+      { char: "😖", tags: "confounded" },
+      { char: "😣", tags: "persevering" },
+      { char: "😞", tags: "disappointed" },
+      { char: "😓", tags: "downcast sweat" },
+      { char: "😩", tags: "weary" },
+      { char: "😫", tags: "tired" },
+      { char: "🥱", tags: "yawn bored" },
+      { char: "😤", tags: "steam nose triumph" },
+      { char: "😡", tags: "rage angry red" },
+      { char: "😠", tags: "angry" },
+      { char: "🤬", tags: "cursing swearing" }
+    ],
+    detective: [
+      { char: "🕵️", tags: "detective spy investigator" },
+      { char: "🕵️‍♂️", tags: "man detective" },
+      { char: "🕵️‍♀️", tags: "woman detective" },
+      { char: "🔍", tags: "magnifying glass search zoom" },
+      { char: "🔎", tags: "magnifying glass right" },
+      { char: "📁", tags: "file folder manila" },
+      { char: "📂", tags: "open folder dossier" },
+      { char: "🗂️", tags: "card index dividers" },
+      { char: "📄", tags: "page document exhibit" },
+      { char: "📃", tags: "page curl" },
+      { char: "📑", tags: "bookmark tabs" },
+      { char: "📌", tags: "pushpin pin corkboard" },
+      { char: "📍", tags: "round pin location" },
+      { char: "📎", tags: "paperclip" },
+      { char: "🖍️", tags: "crayon marker highlight" },
+      { char: "✏️", tags: "pencil draw" },
+      { char: "✒️", tags: "black nib redact" },
+      { char: "🔒", tags: "locked classified" },
+      { char: "🔓", tags: "unlocked unsealed" },
+      { char: "⚖️", tags: "scales justice court" },
+      { char: "👨‍⚖️", tags: "judge court" },
+      { char: "🏛️", tags: "courthouse tribunal" },
+      { char: "🚓", tags: "police car" },
+      { char: "🪪", tags: "id card badge" },
+      { char: "📼", tags: "videocassette tape" },
+      { char: "🎥", tags: "movie camera" },
+      { char: "📞", tags: "telephone receiver call" },
+      { char: "☎️", tags: "telephone" },
+      { char: "💻", tags: "laptop pc computer" },
+      { char: "🕶️", tags: "dark sunglasses agent" },
+      { char: "🧥", tags: "trench coat" },
+      { char: "☕", tags: "coffee mug" },
+      { char: "🐱", tags: "cat" },
+      { char: "🐈‍⬛", tags: "black cat" },
+      { char: "🐾", tags: "paw prints" },
+      { char: "🦊", tags: "fox" },
+      { char: "🦉", tags: "owl" },
+      { char: "🐕", tags: "dog hound" },
+      { char: "🧬", tags: "dna forensic" },
+      { char: "🔬", tags: "microscope lab" }
+    ],
+    hands: [
+      { char: "👍", tags: "thumbs up ok good" },
+      { char: "👎", tags: "thumbs down bad" },
+      { char: "👊", tags: "fist bump punch" },
+      { char: "✊", tags: "raised fist" },
+      { char: "🤛", tags: "left fist" },
+      { char: "🤜", tags: "right fist" },
+      { char: "🤞", tags: "crossed fingers luck" },
+      { char: "✌️", tags: "peace victory" },
+      { char: "🫰", tags: "hand with index and thumb crossed" },
+      { char: "🤟", tags: "love you gesture" },
+      { char: "🤘", tags: "rock on horns" },
+      { char: "👌", tags: "ok hand" },
+      { char: "🤌", tags: "pinched fingers italian" },
+      { char: "🤏", tags: "pinching hand small" },
+      { char: "👈", tags: "point left" },
+      { char: "👉", tags: "point right" },
+      { char: "👆", tags: "point up" },
+      { char: "👇", tags: "point down" },
+      { char: "☝️", tags: "index pointing up" },
+      { char: "✋", tags: "raised hand stop" },
+      { char: "🤚", tags: "raised back of hand" },
+      { char: "🖐️", tags: "hand fingers splayed" },
+      { char: "👋", tags: "wave hello bye" },
+      { char: "🤙", tags: "call me shaka" },
+      { char: "💪", tags: "flex bicep strong" },
+      { char: "🖕", tags: "middle finger" },
+      { char: "✍️", tags: "writing hand" },
+      { char: "🤝", tags: "handshake deal" },
+      { char: "👏", tags: "clap applause" },
+      { char: "🙌", tags: "raising hands hooray" },
+      { char: "👐", tags: "open hands" },
+      { char: "🤲", tags: "palms up" },
+      { char: "🤷", tags: "shrug idk" },
+      { char: "🤦", tags: "facepalm" },
+      { char: "🙅", tags: "no gesture" },
+      { char: "🙆", tags: "ok gesture" },
+      { char: "🙇", tags: "bowing" },
+      { char: "🙋", tags: "raising hand" },
+      { char: "🫶", tags: "heart hands" },
+      { char: "💅", tags: "nail polish slay" }
+    ],
+    hearts: [
+      { char: "❤️", tags: "red heart love" },
+      { char: "🧡", tags: "orange heart" },
+      { char: "💛", tags: "yellow heart" },
+      { char: "💚", tags: "green heart" },
+      { char: "💙", tags: "blue heart" },
+      { char: "💜", tags: "purple heart" },
+      { char: "🖤", tags: "black heart" },
+      { char: "🤍", tags: "white heart" },
+      { char: "🤎", tags: "brown heart" },
+      { char: "❤️‍🔥", tags: "heart on fire" },
+      { char: "❤️‍🩹", tags: "mending heart" },
+      { char: "💕", tags: "two hearts" },
+      { char: "💞", tags: "revolving hearts" },
+      { char: "💓", tags: "beating heart" },
+      { char: "💗", tags: "growing heart" },
+      { char: "💖", tags: "sparkling heart" },
+      { char: "💘", tags: "heart with arrow" },
+      { char: "💝", tags: "heart with ribbon" },
+      { char: "✅", tags: "check mark yes" },
+      { char: "❌", tags: "cross mark no" },
+      { char: "⚠️", tags: "warning" },
+      { char: "🚫", tags: "prohibited" },
+      { char: "❓", tags: "question mark" },
+      { char: "❗", tags: "exclamation mark" },
+      { char: "‼️", tags: "double exclamation" },
+      { char: "⁉️", tags: "exclamation question" },
+      { char: "💢", tags: "anger symbol" },
+      { char: "💫", tags: "dizzy star" },
+      { char: "💦", tags: "sweat droplets" },
+      { char: "💨", tags: "dash wind" },
+      { char: "🎉", tags: "party popper" },
+      { char: "🎊", tags: "confetti ball" },
+      { char: "🏆", tags: "trophy winner" },
+      { char: "🥇", tags: "first place gold medal" },
+      { char: "🎯", tags: "bullseye target" },
+      { char: "🎲", tags: "dice game" },
+      { char: "✨", tags: "sparkles" },
+      { char: "⭐", tags: "star" },
+      { char: "🌟", tags: "glowing star" },
+      { char: "💎", tags: "gem diamond" }
+    ]
+  };
+
+  function getDisplayedEmojiList() {
+    const q = (state.emojiSearchQuery || "").trim().toLowerCase();
+    if (q) {
+      const seen = new Set();
+      const matches = [];
+      for (const list of Object.values(EMOJI_LIBRARY_BY_CATEGORY)) {
+        for (const item of list) {
+          if (
+            !seen.has(item.char) &&
+            (item.char.includes(q) || item.tags.toLowerCase().includes(q))
+          ) {
+            seen.add(item.char);
+            matches.push(item);
+          }
+        }
+      }
+      return matches;
+    }
+    const cat = state.activeEmojiCategory || "hype";
+    return EMOJI_LIBRARY_BY_CATEGORY[cat] || EMOJI_LIBRARY_BY_CATEGORY.hype;
+  }
+
+  function insertEmojiIntoChatInput(inputEl, emojiChar) {
+    if (!inputEl || !emojiChar) return;
+    const start =
+      typeof inputEl.selectionStart === "number"
+        ? inputEl.selectionStart
+        : inputEl.value.length;
+    const end =
+      typeof inputEl.selectionEnd === "number"
+        ? inputEl.selectionEnd
+        : inputEl.value.length;
+    const before = inputEl.value.slice(0, start);
+    const after = inputEl.value.slice(end);
+    inputEl.value = `${before}${emojiChar}${after}`.slice(0, 400);
+    inputEl.focus();
+    const nextPos = Math.min(400, start + emojiChar.length);
+    try {
+      inputEl.setSelectionRange(nextPos, nextPos);
+    } catch (_e) {}
+  }
+
+  function updateEmojiDrawersGridOnly() {
+    const drawers = [
+      document.getElementById("lbEmojiPickerDrawer"),
+      document.getElementById("binderEmojiPickerDrawer"),
+      document.getElementById("globalEmojiPickerDrawer")
+    ];
+    const cat = state.activeEmojiCategory || "hype";
+    const list = getDisplayedEmojiList();
+
+    drawers.forEach((drawer) => {
+      if (!drawer || drawer.hidden) return;
+
+      drawer.querySelectorAll("[data-emoji-cat]").forEach((btn) => {
+        const bCat = btn.getAttribute("data-emoji-cat");
+        btn.classList.toggle(
+          "is-active",
+          !state.emojiSearchQuery && bCat === cat
+        );
+      });
+
+      const grid = drawer.querySelector(".emoji-grid");
+      if (!grid) return;
+
+      grid.innerHTML = list.length
+        ? list
+            .map(
+              (item) => `
+              <button
+                type="button"
+                class="emoji-grid-item"
+                data-pick-emoji="${escapeHtmlAttr(item.char)}"
+                title="${escapeHtmlAttr(item.tags)}"
+              >${item.char}</button>
+            `
+            )
+            .join("")
+        : `<div style="grid-column:1/-1; text-align:center; padding:14px 6px; font-family:var(--font-mono); font-size:0.65rem; color:#9ca3af;">
+            No matching emojis found.
+          </div>`;
+
+      grid.querySelectorAll("[data-pick-emoji]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const emojiChar = btn.getAttribute("data-pick-emoji");
+          if (!emojiChar) return;
+          playForensicSound("click");
+          const inputEl =
+            drawer.id === "globalEmojiPickerDrawer"
+              ? document.getElementById("globalChatInput")
+              : drawer.id === "binderEmojiPickerDrawer"
+              ? document.getElementById("binderChatInput")
+              : document.getElementById("lbChatInput");
+          insertEmojiIntoChatInput(inputEl, emojiChar);
+        });
+      });
+    });
+  }
+
+  function renderEmojiPickerDrawers() {
+    const drawers = [
+      document.getElementById("lbEmojiPickerDrawer"),
+      document.getElementById("binderEmojiPickerDrawer"),
+      document.getElementById("globalEmojiPickerDrawer")
+    ];
+
+    drawers.forEach((drawer) => {
+      if (!drawer) return;
+      if (!state.emojiDrawerOpen) {
+        drawer.hidden = true;
+        return;
+      }
+      drawer.hidden = false;
+
+      if (!drawer.querySelector(".emoji-drawer-header")) {
+        const cat = state.activeEmojiCategory || "hype";
+        drawer.innerHTML = `
+          <div class="emoji-drawer-header">
+            <input
+              type="text"
+              class="emoji-search-input"
+              placeholder="Search emojis (skull, fire, laugh, detective, cat)..."
+              value="${escapeHtmlAttr(state.emojiSearchQuery || "")}"
+            />
+            <button type="button" class="tool-btn btn-danger-accent" data-close-emoji-drawer style="padding:3px 7px; font-size:0.62rem;">
+              CLOSE
+            </button>
+          </div>
+          <div class="emoji-category-tabs">
+            <button type="button" class="emoji-cat-btn ${cat === "hype" ? "is-active" : ""}" data-emoji-cat="hype">🔥 HYPE</button>
+            <button type="button" class="emoji-cat-btn ${cat === "faces" ? "is-active" : ""}" data-emoji-cat="faces">😀 FACES</button>
+            <button type="button" class="emoji-cat-btn ${cat === "detective" ? "is-active" : ""}" data-emoji-cat="detective">🕵️ CASE</button>
+            <button type="button" class="emoji-cat-btn ${cat === "hands" ? "is-active" : ""}" data-emoji-cat="hands">🙌 HANDS</button>
+            <button type="button" class="emoji-cat-btn ${cat === "hearts" ? "is-active" : ""}" data-emoji-cat="hearts">❤️ SYMBOLS</button>
+          </div>
+          <div class="emoji-grid"></div>
+        `;
+
+        const searchInput = drawer.querySelector(".emoji-search-input");
+        searchInput?.addEventListener("input", (e) => {
+          state.emojiSearchQuery = e.target.value;
+          updateEmojiDrawersGridOnly();
+        });
+        searchInput?.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+        });
+
+        drawer
+          .querySelector("[data-close-emoji-drawer]")
+          ?.addEventListener("click", () => {
+            playForensicSound("click");
+            state.emojiDrawerOpen = false;
+            renderEmojiPickerDrawers();
+          });
+
+        drawer.querySelectorAll("[data-emoji-cat]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            playForensicSound("click");
+            state.activeEmojiCategory =
+              btn.getAttribute("data-emoji-cat") || "hype";
+            state.emojiSearchQuery = "";
+            const sInput = drawer.querySelector(".emoji-search-input");
+            if (sInput) sInput.value = "";
+            updateEmojiDrawersGridOnly();
+          });
+        });
+      } else {
+        const searchInput = drawer.querySelector(".emoji-search-input");
+        if (
+          searchInput &&
+          document.activeElement !== searchInput &&
+          searchInput.value !== (state.emojiSearchQuery || "")
+        ) {
+          searchInput.value = state.emojiSearchQuery || "";
+        }
+      }
+    });
+
+    updateEmojiDrawersGridOnly();
+  }
+
   function processChatImageOrGifFile(file) {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -5085,7 +5574,7 @@
       inputEl.placeholder = `Message ${ex.id}, paste pic/GIF...`;
     }
     if (feedEl) {
-      const chatSig = `${ex.id}:${chats.length}:${chats[chats.length - 1]?.id || ""}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}`;
+      const chatSig = `${ex.id}:${chats.length}:${chats.map((c) => c.id).join(",")}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}:${state.userProfile?.avatarId || ""}:${state.userProfile?.customAvatarUrl || ""}`;
       if (feedEl.dataset.lastSig !== chatSig) {
         feedEl.dataset.lastSig = chatSig;
         feedEl.innerHTML = renderChatMessagesHtml(chats, ex.id);
@@ -5119,7 +5608,7 @@
     updateChatReplyBanners();
     updateChatMediaPreviews();
 
-    const chatSig = `GLOBAL:${chats.length}:${chats[chats.length - 1]?.id || ""}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}`;
+    const chatSig = `GLOBAL:${chats.length}:${chats.map((c) => c.id).join(",")}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}:${state.userProfile?.avatarId || ""}:${state.userProfile?.customAvatarUrl || ""}`;
     const feeds = [
       document.getElementById("globalChatFeed"),
       document.getElementById("lbGlobalChatFeed")
@@ -6247,9 +6736,19 @@
         e.target.value = "";
       });
 
+    document.getElementById("lbChatEmojiBtn")?.addEventListener("click", () => {
+      playForensicSound("click");
+      state.emojiDrawerOpen = !state.emojiDrawerOpen;
+      if (state.emojiDrawerOpen) state.gifDrawerOpen = false;
+      renderGifPickerDrawers();
+      renderEmojiPickerDrawers();
+    });
+
     document.getElementById("lbChatGifBtn")?.addEventListener("click", () => {
       playForensicSound("click");
       state.gifDrawerOpen = !state.gifDrawerOpen;
+      if (state.gifDrawerOpen) state.emojiDrawerOpen = false;
+      renderEmojiPickerDrawers();
       renderGifPickerDrawers();
     });
 
@@ -6275,11 +6774,15 @@
       if (!ex) return;
       const val = input ? input.value.trim() : "";
       if (!val && !state.pendingChatMediaUrl) return;
+      if (state.emojiDrawerOpen) {
+        state.emojiDrawerOpen = false;
+        renderEmojiPickerDrawers();
+      }
       submitPageChatMessage(ex.id, val);
       if (input) input.value = "";
     });
 
-    // Global Chat Forms (Floating Drawer + Lightbox Sidebar Tab)
+    // Global Chat Forms (Floating Drawer)
     document
       .getElementById("globalChatUploadBtn")
       ?.addEventListener("click", () => {
@@ -6296,10 +6799,22 @@
       });
 
     document
+      .getElementById("globalChatEmojiBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        state.emojiDrawerOpen = !state.emojiDrawerOpen;
+        if (state.emojiDrawerOpen) state.gifDrawerOpen = false;
+        renderGifPickerDrawers();
+        renderEmojiPickerDrawers();
+      });
+
+    document
       .getElementById("globalChatGifBtn")
       ?.addEventListener("click", () => {
         playForensicSound("click");
         state.gifDrawerOpen = !state.gifDrawerOpen;
+        if (state.gifDrawerOpen) state.emojiDrawerOpen = false;
+        renderEmojiPickerDrawers();
         renderGifPickerDrawers();
       });
 
@@ -6327,6 +6842,10 @@
         const input = document.getElementById("globalChatInput");
         const val = input ? input.value.trim() : "";
         if (!val && !state.pendingChatMediaUrl) return;
+        if (state.emojiDrawerOpen) {
+          state.emojiDrawerOpen = false;
+          renderEmojiPickerDrawers();
+        }
         submitPageChatMessage("GLOBAL", val);
         if (input) input.value = "";
       });

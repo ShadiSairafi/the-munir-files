@@ -3324,11 +3324,11 @@ mark.search-highlight {
 }
 
 .detective-avatar-frame {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--manila-dark);
+  border: 1.5px solid var(--manila-dark);
   background: #141210;
   flex-shrink: 0;
   display: inline-flex;
@@ -3336,22 +3336,24 @@ mark.search-highlight {
   justify-content: center;
 }
 
-.detective-avatar-frame img {
+.detective-avatar-frame img,
+.detective-avatar-frame svg {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .detective-avatar-frame.size-md {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 44px;
+  height: 44px;
+  border-radius: 9px;
 }
 
 .detective-avatar-frame.size-lg {
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
 }
 
 /* Up/Down/Center Slide-Out Pan Pad Drawer on Right Edge of Lightbox Stage */
@@ -3546,9 +3548,9 @@ mark.search-highlight {
 }
 
 .tool-cursor-follower .detective-avatar-frame {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
   border: 1.5px solid var(--cursor-accent, #e6cfa7);
   overflow: hidden;
   flex-shrink: 0;
@@ -3564,7 +3566,7 @@ mark.search-highlight {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6.5px;
+  border-radius: 7.5px;
   display: block;
 }
 
@@ -3649,9 +3651,9 @@ mark.search-highlight {
 }
 
 .remote-user-cursor .detective-avatar-frame {
-  width: 25px;
-  height: 25px;
-  border-radius: 7px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   border: 1.5px solid var(--remote-color, #e6cfa7);
   overflow: hidden;
   flex-shrink: 0;
@@ -3666,7 +3668,7 @@ mark.search-highlight {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 5.5px;
+  border-radius: 6.5px;
   display: block;
 }
 
@@ -3859,12 +3861,12 @@ mark.search-highlight {
 
 .chat-avatar-col {
   flex-shrink: 0;
-  width: 34px;
+  width: 46px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   align-self: stretch;
 }
 
@@ -3874,15 +3876,17 @@ mark.search-highlight {
 
 .chat-avatar-pill {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  margin-top: 2px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border-width: 1.5px;
+  margin-top: 1px;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.65);
 }
 
 .chat-msg-time-outside {
   font-family: var(--font-mono);
-  font-size: 0.5rem;
+  font-size: 0.52rem;
   color: #9ca3af;
   line-height: 1.05;
   text-align: center;
@@ -4169,7 +4173,8 @@ mark.search-highlight {
 
 .chat-reply-banner[hidden],
 .chat-media-preview[hidden],
-.chat-gif-drawer[hidden] {
+.chat-gif-drawer[hidden],
+.chat-emoji-drawer[hidden] {
   display: none !important;
 }
 
@@ -4197,8 +4202,9 @@ mark.search-highlight {
   min-width: 0;
 }
 
-/* GIF Library Drawer */
-.chat-gif-drawer {
+/* GIF & Emoji Library Drawers */
+.chat-gif-drawer,
+.chat-emoji-drawer {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -4210,14 +4216,16 @@ mark.search-highlight {
   max-height: 315px;
 }
 
-.gif-drawer-header {
+.gif-drawer-header,
+.emoji-drawer-header {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .gif-search-input,
-.gif-custom-url-input {
+.gif-custom-url-input,
+.emoji-search-input {
   flex: 1;
   background: #1b1814;
   border: 1px solid #3d3429;
@@ -4230,17 +4238,20 @@ mark.search-highlight {
 }
 
 .gif-search-input:focus,
-.gif-custom-url-input:focus {
+.gif-custom-url-input:focus,
+.emoji-search-input:focus {
   border-color: #eab308;
 }
 
-.gif-category-tabs {
+.gif-category-tabs,
+.emoji-category-tabs {
   display: flex;
   gap: 3px;
   flex-wrap: wrap;
 }
 
-.gif-cat-btn {
+.gif-cat-btn,
+.emoji-cat-btn {
   flex: 1;
   background: #1c1813;
   color: #cfc4b0;
@@ -4256,7 +4267,9 @@ mark.search-highlight {
 }
 
 .gif-cat-btn.is-active,
-.gif-cat-btn:hover {
+.gif-cat-btn:hover,
+.emoji-cat-btn.is-active,
+.emoji-cat-btn:hover {
   background: rgba(234, 179, 8, 0.2);
   color: #fde047;
   border-color: rgba(234, 179, 8, 0.55);
@@ -4269,6 +4282,36 @@ mark.search-highlight {
   overflow-y: auto;
   max-height: 185px;
   padding-right: 2px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 185px;
+  padding: 2px;
+}
+
+.emoji-grid-item {
+  background: #181511;
+  border: 1px solid #2b251e;
+  border-radius: 6px;
+  padding: 4px 0;
+  font-size: 1.18rem;
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.emoji-grid-item:hover {
+  transform: scale(1.16);
+  background: #2b2316;
+  border-color: #eab308;
+  z-index: 2;
 }
 
 .gif-grid-item {
@@ -4360,11 +4403,18 @@ mark.search-highlight {
 }
 
 .chat-media-btn,
+.chat-emoji-btn,
 .chat-gif-btn {
   padding: 6px 7px !important;
   font-size: 0.64rem !important;
   font-weight: 800 !important;
   flex-shrink: 0;
+}
+
+.chat-emoji-btn {
+  font-size: 0.85rem !important;
+  line-height: 1 !important;
+  padding: 5px 6px !important;
 }
 
 .chat-gif-btn {
@@ -4658,9 +4708,9 @@ dialog.compact-modal::backdrop {
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 26px;
+  height: 34px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #181511;
   border: 1.5px solid #d6bf97;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
@@ -4694,9 +4744,9 @@ dialog.compact-modal::backdrop {
 }
 
 .online-user-chip-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
   display: inline-flex;
@@ -4710,7 +4760,7 @@ dialog.compact-modal::backdrop {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 4.5px;
+  border-radius: 5.5px;
   display: block;
 }
 

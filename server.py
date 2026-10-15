@@ -230,14 +230,11 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
             with STATE_LOCK:
                 prune_stale_ephemeral(now_ms)
                 ver = SHARED_STATE["version"]
-                if since > 0 and since >= ver:
-                    body = json.dumps({"ok": True, "unchanged": True, "version": ver}).encode("utf-8")
-                else:
-                    body = json.dumps({
-                        "ok": True,
-                        "version": ver,
-                        "state": SHARED_STATE,
-                    }).encode("utf-8")
+                body = json.dumps({
+                    "ok": True,
+                    "version": ver,
+                    "state": SHARED_STATE,
+                }).encode("utf-8")
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -316,6 +313,27 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
             if isinstance(payload.get("syncBundle"), dict):
                 if merge_sync_bundle(payload["syncBundle"]):
                     persist_needed = True
+
+            if isinstance(payload.get("deletedIds"), dict):
+                for del_id, del_ts in payload["deletedIds"].items():
+                    inc_ts = int(del_ts) if str(del_ts).isdigit() else 1
+                    if inc_ts > SHARED_STATE["deletedIds"].get(del_id, 0):
+                        SHARED_STATE["deletedIds"][del_id] = inc_ts
+                        persist_needed = True
+
+            if isinstance(payload.get("clearedAtByExhibit"), dict):
+                for ex_id, clr_ts in payload["clearedAtByExhibit"].items():
+                    inc_ts = int(clr_ts) if str(clr_ts).isdigit() else 0
+                    if inc_ts > SHARED_STATE["clearedAtByExhibit"].get(ex_id, 0):
+                        SHARED_STATE["clearedAtByExhibit"][ex_id] = inc_ts
+                        persist_needed = True
+
+            for ex_id, chat_list in list(SHARED_STATE["chatsByExhibit"].items()):
+                if isinstance(chat_list, list):
+                    filtered = [c for c in chat_list if isinstance(c, dict) and c.get("id") not in SHARED_STATE["deletedIds"]]
+                    if len(filtered) != len(chat_list):
+                        SHARED_STATE["chatsByExhibit"][ex_id] = filtered
+                        persist_needed = True
 
             if action == "presence_ping" and user_id:
                 SHARED_STATE["presenceByUser"][user_id] = {

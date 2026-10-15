@@ -228,14 +228,6 @@ module.exports = async function handler(req, res) {
   pruneStaleEphemeral(store, now);
 
   if (req.method === "GET") {
-    const since = Number(req.query?.since || 0);
-    if (since > 0 && since >= store.version) {
-      return res.status(200).json({
-        ok: true,
-        unchanged: true,
-        version: store.version
-      });
-    }
     return res.status(200).json({
       ok: true,
       version: store.version,
@@ -279,6 +271,66 @@ module.exports = async function handler(req, res) {
     if (payload.syncBundle && typeof payload.syncBundle === "object") {
       if (mergeSyncBundleIntoStore(store, payload.syncBundle)) {
         persistNeeded = true;
+      }
+    }
+
+    // Merge top-level deletion tombstones & clear timestamps (gossiped on presence_ping & actions)
+    if (payload.deletedIds && typeof payload.deletedIds === "object") {
+      let tombstoneAdded = false;
+      for (const [delId, delTs] of Object.entries(payload.deletedIds)) {
+        const incTs = Number(delTs) || 1;
+        if (!store.deletedIds[delId] || incTs > store.deletedIds[delId]) {
+          store.deletedIds[delId] = incTs;
+          tombstoneAdded = true;
+        }
+      }
+      if (tombstoneAdded) {
+        persistNeeded = true;
+      }
+    }
+
+    if (
+      payload.clearedAtByExhibit &&
+      typeof payload.clearedAtByExhibit === "object"
+    ) {
+      for (const [exId, clrTs] of Object.entries(payload.clearedAtByExhibit)) {
+        const incTs = Number(clrTs) || 0;
+        if (
+          !store.clearedAtByExhibit[exId] ||
+          incTs > store.clearedAtByExhibit[exId]
+        ) {
+          store.clearedAtByExhibit[exId] = incTs;
+          persistNeeded = true;
+        }
+      }
+    }
+
+    // Enforce tombstones across all stored chats and marks immediately
+    for (const [exId, chatList] of Object.entries(store.chatsByExhibit || {})) {
+      if (Array.isArray(chatList)) {
+        const filtered = chatList.filter(
+          (c) => c && c.id && !store.deletedIds[c.id]
+        );
+        if (filtered.length !== chatList.length) {
+          store.chatsByExhibit[exId] = filtered;
+          persistNeeded = true;
+        }
+      }
+    }
+    for (const [exId, markList] of Object.entries(store.marksByExhibit || {})) {
+      if (Array.isArray(markList)) {
+        const clrTs = store.clearedAtByExhibit[exId] || 0;
+        const filtered = markList.filter(
+          (m) =>
+            m &&
+            m.id &&
+            !store.deletedIds[m.id] &&
+            !(clrTs > 0 && (m.ts || 0) <= clrTs)
+        );
+        if (filtered.length !== markList.length) {
+          store.marksByExhibit[exId] = filtered;
+          persistNeeded = true;
+        }
       }
     }
 
