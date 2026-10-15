@@ -3756,8 +3756,16 @@ mark.search-highlight {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  max-width: 88%;
+  max-width: 90%;
   width: fit-content;
+}
+
+.chat-msg-item.is-group-start {
+  margin-top: 3px;
+}
+
+.chat-msg-item.is-group-continuation {
+  margin-top: -4px;
 }
 
 .chat-msg-item.is-other-msg {
@@ -3777,12 +3785,70 @@ mark.search-highlight {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 
+.chat-avatar-spacer {
+  flex-shrink: 0;
+  width: 24px;
+  height: 1px;
+  display: inline-block;
+}
+
 .chat-msg-item.is-other-msg .chat-avatar-pill {
   border-color: #ef4444;
 }
 
 .chat-msg-item.is-own-msg .chat-avatar-pill {
   border-color: #eab308;
+}
+
+.chat-msg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chat-msg-item.is-other-msg .chat-msg-stack {
+  align-items: flex-start;
+}
+
+.chat-msg-item.is-own-msg .chat-msg-stack {
+  align-items: flex-end;
+}
+
+/* Sender Name Label Above the First Bubble of a Continuous Group */
+.chat-sender-label-outside {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.1;
+  padding: 0 4px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
+}
+
+.chat-msg-item.is-other-msg .chat-sender-label-outside {
+  color: #fca5a5;
+}
+
+.chat-msg-item.is-own-msg .chat-sender-label-outside {
+  color: #fde68a;
+}
+
+.chat-msg-bubble-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chat-msg-item.is-other-msg .chat-msg-bubble-row {
+  flex-direction: row;
+}
+
+.chat-msg-item.is-own-msg .chat-msg-bubble-row {
+  flex-direction: row-reverse;
 }
 
 /* Snug, Compact Bubble (Wraps tightly around short messages like WhatsApp/Telegram) */
@@ -3802,18 +3868,40 @@ mark.search-highlight {
   padding: 4px;
 }
 
-/* Incoming (Other Detective) Bubble: Sleek Dark Slate */
+/* Incoming (Other Detective) Bubble: Sleek Dark Slate + Grouped Corner Radii */
 .chat-msg-item.is-other-msg .chat-msg-body {
   background: #1b2028;
   border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.chat-msg-item.is-other-msg.is-group-end .chat-msg-body {
   border-bottom-left-radius: 3px;
 }
 
-/* Outgoing (Your Own) Bubble: Rich Warm Amber-Espresso */
+.chat-msg-item.is-other-msg.is-group-middle .chat-msg-body {
+  border-bottom-left-radius: 5px;
+}
+
+.chat-msg-item.is-other-msg.is-group-continuation .chat-msg-body {
+  border-top-left-radius: 5px;
+}
+
+/* Outgoing (Your Own) Bubble: Rich Warm Amber-Espresso + Grouped Corner Radii */
 .chat-msg-item.is-own-msg .chat-msg-body {
   background: linear-gradient(145deg, #332714 0%, #241b0d 100%);
   border: 1px solid rgba(218, 175, 92, 0.42);
+}
+
+.chat-msg-item.is-own-msg.is-group-end .chat-msg-body {
   border-bottom-right-radius: 3px;
+}
+
+.chat-msg-item.is-own-msg.is-group-middle .chat-msg-body {
+  border-bottom-right-radius: 5px;
+}
+
+.chat-msg-item.is-own-msg.is-group-continuation .chat-msg-body {
+  border-top-right-radius: 5px;
 }
 
 @keyframes chatJumpFlash {
@@ -3827,19 +3915,6 @@ mark.search-highlight {
 
 .chat-msg-item.is-highlighted-msg .chat-msg-body {
   animation: chatJumpFlash 1.3s ease;
-}
-
-.chat-msg-author {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  font-weight: 700;
-  color: #f87171;
-  line-height: 1.15;
-  margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 170px;
 }
 
 /* Inline message text + bottom-right timestamp on the same line */
@@ -3895,7 +3970,7 @@ mark.search-highlight {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  opacity: 0.42;
+  opacity: 0.38;
   transition: opacity 0.14s ease;
   flex-shrink: 0;
   align-self: center;
@@ -4045,7 +4120,7 @@ mark.search-highlight {
   border-radius: 8px;
   padding: 8px;
   box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.78);
-  max-height: 255px;
+  max-height: 315px;
 }
 
 .gif-drawer-header {
@@ -4074,7 +4149,8 @@ mark.search-highlight {
 
 .gif-category-tabs {
   display: flex;
-  gap: 4px;
+  gap: 3px;
+  flex-wrap: wrap;
 }
 
 .gif-cat-btn {
@@ -4083,11 +4159,12 @@ mark.search-highlight {
   color: #cfc4b0;
   border: 1px solid #352e24;
   border-radius: 4px;
-  padding: 3px 6px;
+  padding: 3px 4px;
   font-family: var(--font-mono);
-  font-size: 0.61rem;
+  font-size: 0.57rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.14s ease;
 }
 
@@ -4103,7 +4180,7 @@ mark.search-highlight {
   grid-template-columns: repeat(3, 1fr);
   gap: 5px;
   overflow-y: auto;
-  max-height: 135px;
+  max-height: 185px;
   padding-right: 2px;
 }
 

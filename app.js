@@ -4310,6 +4310,18 @@
     );
   }
 
+  const CHAT_GROUP_BUFFER_MS = 3 * 60 * 1000; // 3-minute continuous message grouping buffer
+
+  function areChatMessagesGrouped(prev, curr) {
+    if (!prev || !curr) return false;
+    const sameSender =
+      (prev.userId && curr.userId && prev.userId === curr.userId) ||
+      (prev.userName && curr.userName && prev.userName === curr.userName);
+    if (!sameSender) return false;
+    const deltaMs = Math.abs((curr.ts || 0) - (prev.ts || 0));
+    return deltaMs <= CHAT_GROUP_BUFFER_MS;
+  }
+
   function renderChatMessagesHtml(chats, exhibitId) {
     if (!chats || chats.length === 0) {
       return `
@@ -4324,10 +4336,15 @@
     const myName = state.userProfile?.name;
 
     return chats
-      .map((m) => {
+      .map((m, idx) => {
         const isMine =
           Boolean(myId && m.userId && m.userId === myId) ||
           Boolean(myName && m.userName && m.userName === myName);
+
+        const prevMsg = idx > 0 ? chats[idx - 1] : null;
+        const nextMsg = idx < chats.length - 1 ? chats[idx + 1] : null;
+        const isGroupStart = !areChatMessagesGrouped(prevMsg, m);
+        const isGroupEnd = !areChatMessagesGrouped(m, nextMsg);
 
         const rawText = (m.text || "").trim();
         const textIsMedia = !m.mediaUrl && isDirectMediaUrl(rawText);
@@ -4364,41 +4381,55 @@
           `
           : "";
 
+        const groupClasses = [
+          isMine ? "is-own-msg" : "is-other-msg",
+          isGroupStart ? "is-group-start" : "is-group-continuation",
+          isGroupEnd ? "is-group-end" : "is-group-middle"
+        ].join(" ");
+
         return `
-        <div class="chat-msg-item ${isMine ? "is-own-msg" : "is-other-msg"}" data-chat-msg-id="${escapeHtmlAttr(m.id || "")}">
-          <span class="detective-avatar-frame chat-avatar-pill" title="${escapeHtmlAttr(m.userName || "Detective")}">${renderAvatarHtml(m)}</span>
-          <div class="chat-msg-body ${effectiveMediaUrl && !displayCaption ? "is-media-only" : ""}">
+        <div class="chat-msg-item ${groupClasses}" data-chat-msg-id="${escapeHtmlAttr(m.id || "")}">
+          ${
+            isGroupEnd
+              ? `<span class="detective-avatar-frame chat-avatar-pill" title="${escapeHtmlAttr(m.userName || "Detective")}">${renderAvatarHtml(m)}</span>`
+              : `<span class="chat-avatar-spacer" aria-hidden="true"></span>`
+          }
+          <div class="chat-msg-stack">
             ${
-              !isMine
-                ? `<div class="chat-msg-author">${escapeHtml(m.userName || "Detective")}</div>`
+              isGroupStart
+                ? `<div class="chat-sender-label-outside">${escapeHtml(m.userName || "Detective")}</div>`
                 : ""
             }
-            ${quotedHtml}
-            ${mediaHtml}
-            <div class="chat-msg-content-line">
-              ${
-                displayCaption
-                  ? `<span class="chat-msg-text">${escapeHtml(displayCaption)}</span>`
-                  : ""
-              }
-              <span class="chat-msg-time">${escapeHtml(formatRelativeTime(m.ts))}</span>
+            <div class="chat-msg-bubble-row">
+              <div class="chat-msg-body ${effectiveMediaUrl && !displayCaption ? "is-media-only" : ""}">
+                ${quotedHtml}
+                ${mediaHtml}
+                <div class="chat-msg-content-line">
+                  ${
+                    displayCaption
+                      ? `<span class="chat-msg-text">${escapeHtml(displayCaption)}</span>`
+                      : ""
+                  }
+                  <span class="chat-msg-time">${escapeHtml(formatRelativeTime(m.ts))}</span>
+                </div>
+              </div>
+              <div class="chat-msg-actions">
+                <button
+                  type="button"
+                  class="chat-reply-btn"
+                  data-reply-chat="${escapeHtmlAttr(m.id || "")}"
+                  data-reply-author="${escapeHtmlAttr(m.userName || "Detective")}"
+                  data-reply-text="${escapeHtmlAttr(replySnippetText)}"
+                  data-chat-exhibit="${escapeHtmlAttr(exhibitId)}"
+                  title="Reply"
+                >↩</button>
+                ${
+                  isMine && m.id
+                    ? `<button type="button" class="chat-delete-btn" data-delete-chat="${escapeHtmlAttr(m.id)}" data-chat-exhibit="${escapeHtmlAttr(exhibitId)}" title="Delete message">×</button>`
+                    : ""
+                }
+              </div>
             </div>
-          </div>
-          <div class="chat-msg-actions">
-            <button
-              type="button"
-              class="chat-reply-btn"
-              data-reply-chat="${escapeHtmlAttr(m.id || "")}"
-              data-reply-author="${escapeHtmlAttr(m.userName || "Detective")}"
-              data-reply-text="${escapeHtmlAttr(replySnippetText)}"
-              data-chat-exhibit="${escapeHtmlAttr(exhibitId)}"
-              title="Reply"
-            >↩</button>
-            ${
-              isMine && m.id
-                ? `<button type="button" class="chat-delete-btn" data-delete-chat="${escapeHtmlAttr(m.id)}" data-chat-exhibit="${escapeHtmlAttr(exhibitId)}" title="Delete message">×</button>`
-                : ""
-            }
           </div>
         </div>
       `;
@@ -4469,39 +4500,102 @@
   }
 
   let gifSearchDebounceTimer = null;
+  let gifCurrentOffset = 0;
+  let gifIsFetchingMore = false;
+  let gifHasMore = true;
 
-  async function searchGiphyLive(query) {
-    const q = (query || "").trim();
-    if (!q) {
-      state.gifRemoteResults = null;
-      renderGifPickerDrawers();
-      return;
+  const GIF_CATEGORY_LIVE_QUERIES = {
+    unhinged: "unhinged meme walter white homelander speed",
+    sus: "caught in 4k suspicious stare doakes side eye",
+    cooked: "shaq timeout crying meme skeleton explosion fbi",
+    memes: "funny reaction meme shitpost bruh",
+    trending: "__TRENDING__"
+  };
+
+  function mapGiphyItems(rawList, fallbackTitle = "GIF") {
+    return (rawList || [])
+      .map((g) => ({
+        id: g.id,
+        title: g.title || fallbackTitle,
+        previewUrl:
+          g.images?.fixed_width_small?.url ||
+          g.images?.fixed_height_small?.url ||
+          g.images?.fixed_height?.url ||
+          `https://media.giphy.com/media/${g.id}/200.gif`,
+        fullUrl:
+          g.images?.fixed_height?.url ||
+          `https://media.giphy.com/media/${g.id}/giphy.gif`
+      }))
+      .filter((x) => x.id);
+  }
+
+  async function fetchGiphyFeed({ query, category, append = false }) {
+    if (gifIsFetchingMore && append) return;
+    gifIsFetchingMore = true;
+    if (!append) {
+      gifCurrentOffset = 0;
+      gifHasMore = true;
     }
+    updateGifDrawersGridOnly();
+
+    const q = (query || "").trim();
+    const cat = category || state.activeGifCategory || "unhinged";
+    const limit = 50;
+    const offset = gifCurrentOffset;
+
     try {
-      const res = await fetch(
-        `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_PUBLIC_API_KEY}&q=${encodeURIComponent(
+      let url = "";
+      if (q) {
+        url = `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_PUBLIC_API_KEY}&q=${encodeURIComponent(
           q
-        )}&limit=20&rating=r`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      const items = (data.data || [])
-        .map((g) => ({
-          id: g.id,
-          title: g.title || q,
-          previewUrl:
-            g.images?.fixed_height_small?.url ||
-            g.images?.fixed_height?.url ||
-            `https://media.giphy.com/media/${g.id}/200.gif`,
-          fullUrl:
-            g.images?.fixed_height?.url ||
-            `https://media.giphy.com/media/${g.id}/giphy.gif`
-        }))
-        .filter((x) => x.id);
-      state.gifRemoteResults = items;
-      renderGifPickerDrawers();
+        )}&limit=${limit}&offset=${offset}&rating=r`;
+      } else if (GIF_CATEGORY_LIVE_QUERIES[cat] === "__TRENDING__") {
+        url = `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_PUBLIC_API_KEY}&limit=${limit}&offset=${offset}&rating=r`;
+      } else {
+        const catQuery =
+          GIF_CATEGORY_LIVE_QUERIES[cat] || GIF_CATEGORY_LIVE_QUERIES.unhinged;
+        url = `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_PUBLIC_API_KEY}&q=${encodeURIComponent(
+          catQuery
+        )}&limit=${limit}&offset=${offset}&rating=r`;
+      }
+
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const fetched = mapGiphyItems(data.data, q || cat);
+        gifHasMore = fetched.length >= 25;
+        gifCurrentOffset += fetched.length;
+
+        // Prepend curated favorites on page 0 when browsing a category without a custom search query
+        let baseList = [];
+        if (!q && !append && CURATED_GIFS_BY_CATEGORY[cat]) {
+          baseList = CURATED_GIFS_BY_CATEGORY[cat].map((item) => ({
+            id: item.id,
+            title: item.title,
+            previewUrl: `https://media.giphy.com/media/${item.id}/200.gif`,
+            fullUrl: `https://media.giphy.com/media/${item.id}/giphy.gif`
+          }));
+        }
+
+        const existing = append && Array.isArray(state.gifRemoteResults)
+          ? state.gifRemoteResults
+          : baseList;
+
+        const seen = new Set(existing.map((i) => i.id));
+        const merged = [...existing];
+        fetched.forEach((item) => {
+          if (!seen.has(item.id)) {
+            seen.add(item.id);
+            merged.push(item);
+          }
+        });
+        state.gifRemoteResults = merged;
+      }
     } catch (_e) {
-      // Fallback to curated list silently
+      // Keep curated fallback silently
+    } finally {
+      gifIsFetchingMore = false;
+      updateGifDrawersGridOnly();
     }
   }
 
@@ -4513,109 +4607,78 @@
     return filtered[state.binderIndex]?.id || EXHIBITS[0]?.id || "EX-01";
   }
 
-  function renderGifPickerDrawers() {
+  function getDisplayedGifList() {
+    const cat = state.activeGifCategory || "unhinged";
+    const curated = (
+      CURATED_GIFS_BY_CATEGORY[cat] || CURATED_GIFS_BY_CATEGORY.unhinged
+    ).map((item) => ({
+      id: item.id,
+      title: item.title,
+      previewUrl: `https://media.giphy.com/media/${item.id}/200.gif`,
+      fullUrl: `https://media.giphy.com/media/${item.id}/giphy.gif`
+    }));
+
+    if (Array.isArray(state.gifRemoteResults) && state.gifRemoteResults.length) {
+      return state.gifRemoteResults;
+    }
+    return curated;
+  }
+
+  // Updates ONLY the GIF grid & category button states so the search <input> NEVER loses focus while typing!
+  function updateGifDrawersGridOnly() {
     const drawers = [
       document.getElementById("lbGifPickerDrawer"),
       document.getElementById("binderGifPickerDrawer")
     ];
+    const cat = state.activeGifCategory || "unhinged";
+    const list = getDisplayedGifList();
 
     drawers.forEach((drawer) => {
-      if (!drawer) return;
-      if (!state.gifDrawerOpen) {
-        drawer.hidden = true;
-        return;
-      }
-      drawer.hidden = false;
-
-      const cat = state.activeGifCategory || "unhinged";
-      const curated = (
-        CURATED_GIFS_BY_CATEGORY[cat] || CURATED_GIFS_BY_CATEGORY.unhinged
-      ).map((item) => ({
-        id: item.id,
-        title: item.title,
-        previewUrl: `https://media.giphy.com/media/${item.id}/200.gif`,
-        fullUrl: `https://media.giphy.com/media/${item.id}/giphy.gif`
-      }));
-
-      const list =
-        state.gifSearchQuery && Array.isArray(state.gifRemoteResults)
-          ? state.gifRemoteResults
-          : curated;
-
-      drawer.innerHTML = `
-        <div class="gif-drawer-header">
-          <input
-            type="text"
-            class="gif-search-input"
-            placeholder="Search any GIF or meme..."
-            value="${escapeHtmlAttr(state.gifSearchQuery || "")}"
-          />
-          <button type="button" class="chat-reply-cancel-btn" data-close-gif-drawer title="Close GIFs">×</button>
-        </div>
-        <div class="gif-category-tabs">
-          <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "unhinged" ? "is-active" : ""}" data-gif-cat="unhinged">🔥 Unhinged</button>
-          <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "sus" ? "is-active" : ""}" data-gif-cat="sus">🕵️ Sus / 4K</button>
-          <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "cooked" ? "is-active" : ""}" data-gif-cat="cooked">💀 Cooked</button>
-        </div>
-        <div class="gif-grid">
-          ${
-            list.length
-              ? list
-                  .map(
-                    (g) => `
-                <button
-                  type="button"
-                  class="gif-grid-item"
-                  data-pick-gif-url="${escapeHtmlAttr(g.fullUrl)}"
-                  title="${escapeHtmlAttr(g.title)}"
-                >
-                  <img src="${escapeHtmlAttr(g.previewUrl)}" alt="${escapeHtmlAttr(g.title)}" loading="lazy" />
-                </button>
-              `
-                  )
-                  .join("")
-              : `<div style="grid-column:1/-1;text-align:center;padding:14px;font-size:0.7rem;color:#9ca3af;">No GIFs found for that search. Paste any direct GIF URL below!</div>`
-          }
-        </div>
-        <div class="gif-custom-url-bar">
-          <input
-            type="url"
-            class="gif-custom-url-input"
-            placeholder="Or paste ANY direct .gif / image URL here..."
-          />
-          <button type="button" class="tool-btn is-active gif-send-url-btn">Send URL</button>
-        </div>
-      `;
-
-      const searchInput = drawer.querySelector(".gif-search-input");
-      searchInput?.addEventListener("input", (e) => {
-        state.gifSearchQuery = e.target.value;
-        if (gifSearchDebounceTimer) clearTimeout(gifSearchDebounceTimer);
-        gifSearchDebounceTimer = setTimeout(() => {
-          searchGiphyLive(state.gifSearchQuery);
-        }, 280);
-      });
-
-      drawer
-        .querySelector("[data-close-gif-drawer]")
-        ?.addEventListener("click", () => {
-          playForensicSound("click");
-          state.gifDrawerOpen = false;
-          renderGifPickerDrawers();
-        });
+      if (!drawer || drawer.hidden) return;
 
       drawer.querySelectorAll("[data-gif-cat]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          playForensicSound("click");
-          state.activeGifCategory =
-            btn.getAttribute("data-gif-cat") || "unhinged";
-          state.gifSearchQuery = "";
-          state.gifRemoteResults = null;
-          renderGifPickerDrawers();
-        });
+        const bCat = btn.getAttribute("data-gif-cat");
+        btn.classList.toggle(
+          "is-active",
+          !state.gifSearchQuery && bCat === cat
+        );
       });
 
-      drawer.querySelectorAll("[data-pick-gif-url]").forEach((btn) => {
+      const grid = drawer.querySelector(".gif-grid");
+      if (!grid) return;
+
+      if (!list.length && !gifIsFetchingMore) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:18px;font-size:0.7rem;color:#9ca3af;">No GIFs found for "${escapeHtml(
+          state.gifSearchQuery
+        )}". Try another keyword or paste a direct URL below!</div>`;
+        return;
+      }
+
+      grid.innerHTML = `
+        ${list
+          .map(
+            (g) => `
+          <button
+            type="button"
+            class="gif-grid-item"
+            data-pick-gif-url="${escapeHtmlAttr(g.fullUrl)}"
+            title="${escapeHtmlAttr(g.title)}"
+          >
+            <img src="${escapeHtmlAttr(g.previewUrl)}" alt="${escapeHtmlAttr(g.title)}" loading="lazy" />
+          </button>
+        `
+          )
+          .join("")}
+        ${
+          gifHasMore
+            ? `<button type="button" class="tool-btn gif-load-more-btn" data-load-more-gifs style="grid-column:1/-1; justify-content:center; padding:6px; font-size:0.66rem; margin-top:4px;">
+                ${gifIsFetchingMore ? "Loading more GIFs..." : "+ Load 50 More GIFs"}
+              </button>`
+            : ""
+        }
+      `;
+
+      grid.querySelectorAll("[data-pick-gif-url]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const gifUrl = btn.getAttribute("data-pick-gif-url");
           if (!gifUrl) return;
@@ -4632,24 +4695,164 @@
         });
       });
 
-      const customUrlInput = drawer.querySelector(".gif-custom-url-input");
-      const customUrlBtn = drawer.querySelector(".gif-send-url-btn");
-      const sendCustomUrl = () => {
-        const val = (customUrlInput?.value || "").trim();
-        if (!val) return;
-        const exId = getActiveExhibitIdForChat();
-        state.gifDrawerOpen = false;
-        renderGifPickerDrawers();
-        submitPageChatMessage(exId, "", val);
-      };
-      customUrlBtn?.addEventListener("click", sendCustomUrl);
-      customUrlInput?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          sendCustomUrl();
-        }
-      });
+      grid
+        .querySelector("[data-load-more-gifs]")
+        ?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          fetchGiphyFeed({
+            query: state.gifSearchQuery,
+            category: state.activeGifCategory,
+            append: true
+          });
+        });
     });
+  }
+
+  function renderGifPickerDrawers() {
+    const drawers = [
+      document.getElementById("lbGifPickerDrawer"),
+      document.getElementById("binderGifPickerDrawer")
+    ];
+
+    drawers.forEach((drawer) => {
+      if (!drawer) return;
+      if (!state.gifDrawerOpen) {
+        drawer.hidden = true;
+        return;
+      }
+      drawer.hidden = false;
+
+      // Only build the shell once so typing in .gif-search-input NEVER loses focus!
+      if (!drawer.querySelector(".gif-drawer-header")) {
+        const cat = state.activeGifCategory || "unhinged";
+        drawer.innerHTML = `
+          <div class="gif-drawer-header">
+            <input
+              type="text"
+              class="gif-search-input"
+              placeholder="Search millions of GIFs & memes..."
+              value="${escapeHtmlAttr(state.gifSearchQuery || "")}"
+              autocomplete="off"
+            />
+            <button type="button" class="chat-reply-cancel-btn" data-close-gif-drawer title="Close GIFs">×</button>
+          </div>
+          <div class="gif-category-tabs">
+            <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "unhinged" ? "is-active" : ""}" data-gif-cat="unhinged">🔥 Unhinged</button>
+            <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "sus" ? "is-active" : ""}" data-gif-cat="sus">🕵️ Sus / 4K</button>
+            <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "cooked" ? "is-active" : ""}" data-gif-cat="cooked">💀 Cooked</button>
+            <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "memes" ? "is-active" : ""}" data-gif-cat="memes">😂 Memes</button>
+            <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "trending" ? "is-active" : ""}" data-gif-cat="trending">📈 Hot</button>
+          </div>
+          <div class="gif-grid"></div>
+          <div class="gif-custom-url-bar">
+            <input
+              type="url"
+              class="gif-custom-url-input"
+              placeholder="Or paste ANY direct .gif / image URL here..."
+            />
+            <button type="button" class="tool-btn is-active gif-send-url-btn">Send URL</button>
+          </div>
+        `;
+
+        const searchInput = drawer.querySelector(".gif-search-input");
+        searchInput?.addEventListener("input", (e) => {
+          state.gifSearchQuery = e.target.value;
+          if (gifSearchDebounceTimer) clearTimeout(gifSearchDebounceTimer);
+          gifSearchDebounceTimer = setTimeout(() => {
+            fetchGiphyFeed({
+              query: state.gifSearchQuery,
+              category: state.activeGifCategory,
+              append: false
+            });
+          }, 220);
+        });
+
+        // Prevent Lightbox keyboard shortcuts while typing in GIF search
+        searchInput?.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+        });
+
+        drawer
+          .querySelector("[data-close-gif-drawer]")
+          ?.addEventListener("click", () => {
+            playForensicSound("click");
+            state.gifDrawerOpen = false;
+            renderGifPickerDrawers();
+          });
+
+        drawer.querySelectorAll("[data-gif-cat]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            playForensicSound("click");
+            state.activeGifCategory =
+              btn.getAttribute("data-gif-cat") || "unhinged";
+            state.gifSearchQuery = "";
+            const sInput = drawer.querySelector(".gif-search-input");
+            if (sInput) sInput.value = "";
+            state.gifRemoteResults = null;
+            fetchGiphyFeed({
+              query: "",
+              category: state.activeGifCategory,
+              append: false
+            });
+          });
+        });
+
+        const gridEl = drawer.querySelector(".gif-grid");
+        gridEl?.addEventListener("scroll", () => {
+          if (
+            !gifIsFetchingMore &&
+            gifHasMore &&
+            gridEl.scrollTop + gridEl.clientHeight >= gridEl.scrollHeight - 40
+          ) {
+            fetchGiphyFeed({
+              query: state.gifSearchQuery,
+              category: state.activeGifCategory,
+              append: true
+            });
+          }
+        });
+
+        const customUrlInput = drawer.querySelector(".gif-custom-url-input");
+        const customUrlBtn = drawer.querySelector(".gif-send-url-btn");
+        const sendCustomUrl = () => {
+          const val = (customUrlInput?.value || "").trim();
+          if (!val) return;
+          const exId = getActiveExhibitIdForChat();
+          customUrlInput.value = "";
+          state.gifDrawerOpen = false;
+          renderGifPickerDrawers();
+          submitPageChatMessage(exId, "", val);
+        };
+        customUrlBtn?.addEventListener("click", sendCustomUrl);
+        customUrlInput?.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            sendCustomUrl();
+          }
+        });
+      } else {
+        const searchInput = drawer.querySelector(".gif-search-input");
+        if (
+          searchInput &&
+          document.activeElement !== searchInput &&
+          searchInput.value !== (state.gifSearchQuery || "")
+        ) {
+          searchInput.value = state.gifSearchQuery || "";
+        }
+      }
+    });
+
+    updateGifDrawersGridOnly();
+
+    // Auto-fetch 50 live GIFs the first time the drawer opens if not yet loaded
+    if (state.gifDrawerOpen && !state.gifRemoteResults && !gifIsFetchingMore) {
+      fetchGiphyFeed({
+        query: state.gifSearchQuery,
+        category: state.activeGifCategory,
+        append: false
+      });
+    }
   }
 
   function processChatImageOrGifFile(file) {
