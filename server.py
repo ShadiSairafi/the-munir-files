@@ -346,7 +346,7 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                 if not any(e.get("id") == entry.get("id") for e in SHARED_STATE["auditLog"]):
                     SHARED_STATE["auditLog"].insert(0, entry)
                 persist_needed = True
-            elif action == "chat_message" and exhibit_id and (payload.get("text") or payload.get("chatMsg")):
+            elif action == "chat_message" and exhibit_id and (payload.get("text") or payload.get("mediaUrl") or payload.get("chatMsg")):
                 lst = SHARED_STATE["chatsByExhibit"].setdefault(exhibit_id, [])
                 text = str(payload.get("text") or "").strip()[:400]
                 msg = payload.get("chatMsg") or {
@@ -356,6 +356,7 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                     "avatarId": avatar_id,
                     "customAvatarUrl": custom_avatar_url,
                     "text": text,
+                    "mediaUrl": payload.get("mediaUrl") or None,
                     "replyTo": payload.get("replyTo") or None,
                     "ts": now_ms,
                 }

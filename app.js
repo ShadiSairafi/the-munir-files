@@ -351,7 +351,12 @@
     imageFilter: "none",
     sidebarVisible: true,
     autoplayTimer: null,
-    replyingToChat: null
+    replyingToChat: null,
+    pendingChatMediaUrl: null,
+    gifDrawerOpen: false,
+    activeGifCategory: "unhinged",
+    gifSearchQuery: "",
+    gifRemoteResults: null
   };
 
   const broadcastChannel =
@@ -1623,21 +1628,33 @@
       };
       state.shared.auditLog.unshift(entry);
       payload.auditEntry = entry;
-    } else if (action === "chat_message" && exhibitId && payload.text) {
+    } else if (
+      action === "chat_message" &&
+      exhibitId &&
+      (payload.text || payload.mediaUrl)
+    ) {
       if (!state.shared.chatsByExhibit[exhibitId]) {
         state.shared.chatsByExhibit[exhibitId] = [];
       }
+      const cleanText = (payload.text || "").trim();
+      const mediaUrl = payload.mediaUrl || null;
       const msg = {
         id: uid(),
         userId,
         userName,
         avatarId,
         customAvatarUrl,
-        text: payload.text.trim(),
+        text: cleanText,
+        mediaUrl,
         replyTo: payload.replyTo || null,
         ts: now
       };
       state.shared.chatsByExhibit[exhibitId].push(msg);
+      const summaryLabel = cleanText
+        ? `"${cleanText.slice(0, 70)}"`
+        : mediaUrl
+        ? "[Sent GIF / Picture]"
+        : "";
       const auditEntry = {
         id: uid(),
         type: "chat",
@@ -1647,8 +1664,8 @@
         customAvatarUrl,
         exhibitId,
         detail: msg.replyTo
-          ? `Replied to ${msg.replyTo.userName || "Detective"} on ${exhibitId}: "${msg.text.slice(0, 70)}"`
-          : `Commented on ${exhibitId}: "${msg.text.slice(0, 70)}"`,
+          ? `Replied to ${msg.replyTo.userName || "Detective"} on ${exhibitId}: ${summaryLabel}`
+          : `Commented on ${exhibitId}: ${summaryLabel}`,
         ts: now
       };
       state.shared.auditLog.unshift(auditEntry);
@@ -2778,16 +2795,39 @@
           ${renderChatMessagesHtml(chats, ex.id)}
         </div>
 
-        <div class="chat-composer-shell">
+        <div class="chat-composer-shell" ${includeIds ? 'id="binderChatComposerShell"' : ""}>
           <div class="chat-reply-banner" ${includeIds ? 'id="binderChatReplyBanner"' : ""} hidden></div>
+          <div class="chat-media-preview" ${includeIds ? 'id="binderChatMediaPreview"' : ""} hidden></div>
+          <div class="chat-gif-drawer" ${includeIds ? 'id="binderGifPickerDrawer"' : ""} hidden></div>
           <form class="page-chat-form" ${includeIds ? 'id="binderChatForm"' : ""}>
+            <input
+              type="file"
+              ${includeIds ? 'id="binderChatFileInput"' : ""}
+              accept="image/*,.gif,.webp,.png,.jpg,.jpeg"
+              hidden
+            />
+            <button
+              type="button"
+              class="tool-btn chat-media-btn"
+              ${includeIds ? 'id="binderChatUploadBtn"' : ""}
+              title="Upload Picture or GIF"
+            >
+              <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </button>
+            <button
+              type="button"
+              class="tool-btn chat-gif-btn"
+              ${includeIds ? 'id="binderChatGifBtn"' : ""}
+              title="Open Unhinged & Reaction GIF Library"
+            >
+              <span>GIF</span>
+            </button>
             <input
               type="text"
               ${includeIds ? 'id="binderChatInput"' : ""}
               class="page-chat-input"
-              placeholder="Comment on ${escapeHtmlAttr(ex.id)} as ${escapeHtmlAttr(state.userProfile?.name || "Detective")}..."
+              placeholder="Message, paste pic/GIF, or drop link..."
               maxlength="400"
-              required
             />
             <button type="submit" class="tool-btn is-active">
               ${ICON("send", "icon-sm")}
@@ -2933,12 +2973,56 @@
       .getElementById("binderEditIdentityBtn")
       ?.addEventListener("click", openIdentityModal);
 
+    updateChatMediaPreviews();
+    renderGifPickerDrawers();
+
+    document
+      .getElementById("binderChatUploadBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        document.getElementById("binderChatFileInput")?.click();
+      });
+
+    document
+      .getElementById("binderChatFileInput")
+      ?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (file) processChatImageOrGifFile(file);
+        e.target.value = "";
+      });
+
+    document
+      .getElementById("binderChatGifBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        state.gifDrawerOpen = !state.gifDrawerOpen;
+        renderGifPickerDrawers();
+      });
+
+    document
+      .getElementById("binderChatInput")
+      ?.addEventListener("paste", (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              processChatImageOrGifFile(file);
+              break;
+            }
+          }
+        }
+      });
+
     document.getElementById("binderChatForm")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const input = document.getElementById("binderChatInput");
-      if (!input || !input.value.trim()) return;
-      submitPageChatMessage(ex.id, input.value.trim());
-      input.value = "";
+      const val = input ? input.value.trim() : "";
+      if (!val && !state.pendingChatMediaUrl) return;
+      submitPageChatMessage(ex.id, val);
+      if (input) input.value = "";
     });
   }
 
@@ -4175,12 +4259,63 @@
   // ============================================================================
   // PER-PAGE LIVE DETECTIVE CHAT & COOKIE-SAVED SIDEBAR TAB + DELETE OWN MESSAGE
   // ============================================================================
+  const GIPHY_PUBLIC_API_KEY = "GlVGYHkr3WSBnllca54iNt0yFbjz7L65";
+
+  const CURATED_GIFS_BY_CATEGORY = {
+    unhinged: [
+      { id: "kUo63tSytK1k4", title: "Walter White Collapse" },
+      { id: "l0IylOPCNkiqOgMyA", title: "Charlie Day Conspiracy" },
+      { id: "s5wFafpHxqKbIEERl9", title: "Speed Holding Laugh" },
+      { id: "h3oVuFhMh6dZbAXigo", title: "Homelander Unhinged Stare" },
+      { id: "QnwhZzo7g3yHXnX6PT", title: "Saul Goodman 3D" },
+      { id: "3YuR0bdGXlP6U", title: "Patrick Bateman Stare" },
+      { id: "f3foFwyuZGWHMtyA8s", title: "Walter Screaming in Car" },
+      { id: "XzJJaNFsRnJlhOUVFy", title: "IShowSpeed Trying Not To Laugh" },
+      { id: "IZ0IshI0uKhQgXuCVx", title: "Homelander Eye Twitch" },
+      { id: "d6xAHHirkPBTJlaGE5", title: "Pepe Silvia Panic" }
+    ],
+    sus: [
+      { id: "MVoX99cLXXU0gq7QuG", title: "Doakes Stare" },
+      { id: "lf5zfD1fYZmvGraZg0", title: "Surprise Doakes" },
+      { id: "ACZqfCpSGhG8h6HRV6", title: "Rock Eyebrow Raise" },
+      { id: "dLhoOYRmsJVOhKbyTK", title: "Caught in 4K Camera" },
+      { id: "H5C8CevNMbpBqNqFjl", title: "Side Eye Monkey" },
+      { id: "2PDAWO2juLlN5pQqmb", title: "Suspicious Squint" },
+      { id: "JaNtIG4UnKzD2", title: "Rock Taking Off Glasses" },
+      { id: "1rjEPbv5qlEX82ocC6", title: "Caught Red Handed" }
+    ],
+    cooked: [
+      { id: "ltoVrEYgv30GJvSDOk", title: "Shaq Timeout" },
+      { id: "Btnye7ETaBO3HjBGCa", title: "Shocked Stare" },
+      { id: "26FPzgftlRfgwkEw0", title: "Crying Jordan" },
+      { id: "gqnJhylmhj7AxiZwI9", title: "Skeleton Explosion" },
+      { id: "jmSjPi6soIoQCFwaXJ", title: "FBI Open Up" },
+      { id: "IYjcAIri8C7f8LvLor", title: "Oh No Shocked" },
+      { id: "rhYsUMhhd6yA0", title: "Mind Blown Nuclear" },
+      { id: "0g75kK2gtijxwlClCX", title: "Calm Down Timeout" }
+    ]
+  };
+
+  function isDirectMediaUrl(str) {
+    if (!str || typeof str !== "string") return false;
+    const s = str.trim();
+    if (s.startsWith("data:image/")) return true;
+    if (!/^https?:\/\/\S+$/i.test(s)) return false;
+    return (
+      /\.(gif|png|jpe?g|webp|avif)(\?.*)?$/i.test(s) ||
+      /media\d*\.giphy\.com\/media\//i.test(s) ||
+      /media\.tenor\.com\//i.test(s) ||
+      /c\.tenor\.com\//i.test(s) ||
+      /i\.imgur\.com\//i.test(s)
+    );
+  }
+
   function renderChatMessagesHtml(chats, exhibitId) {
     if (!chats || chats.length === 0) {
       return `
         <div class="chat-empty-state">
           <div class="chat-empty-stamp">ENCRYPTED CHANNEL READY</div>
-          <div>No field transmissions in <strong>${escapeHtml(exhibitId)}</strong> yet.<br/>Drop a forensic observation or reply below.</div>
+          <div>No messages in <strong>${escapeHtml(exhibitId)}</strong> yet.<br/>Drop a text, picture, or GIF below.</div>
         </div>
       `;
     }
@@ -4194,49 +4329,76 @@
           Boolean(myId && m.userId && m.userId === myId) ||
           Boolean(myName && m.userName && m.userName === myName);
 
-        const roleBadge = isMine
-          ? `<span class="chat-role-pill is-you">YOU</span>`
-          : `<span class="chat-role-pill is-agent">AGENT</span>`;
+        const rawText = (m.text || "").trim();
+        const textIsMedia = !m.mediaUrl && isDirectMediaUrl(rawText);
+        const effectiveMediaUrl = m.mediaUrl || (textIsMedia ? rawText : null);
+        const displayCaption = textIsMedia ? "" : rawText;
+
+        const replySnippetText = displayCaption
+          ? displayCaption.slice(0, 90)
+          : effectiveMediaUrl
+          ? "📷 [GIF / Photo]"
+          : "";
 
         const quotedHtml =
           m.replyTo && (m.replyTo.text || m.replyTo.userName)
             ? `
               <div class="chat-quoted-reply" data-jump-chat-id="${escapeHtmlAttr(m.replyTo.id || "")}" title="Jump to original message">
-                <span class="chat-quoted-author">↩ ${escapeHtml(m.replyTo.userName || "Detective")}</span>
-                <span class="chat-quoted-text">${escapeHtml(m.replyTo.text || "")}</span>
+                <span class="chat-quoted-author">${escapeHtml(m.replyTo.userName || "Detective")}</span>
+                <span class="chat-quoted-text">${escapeHtml(m.replyTo.text || "📷 [GIF / Photo]")}</span>
               </div>
             `
             : "";
 
+        const mediaHtml = effectiveMediaUrl
+          ? `
+            <div class="chat-msg-media-wrap">
+              <img
+                src="${escapeHtmlAttr(effectiveMediaUrl)}"
+                alt="Chat media"
+                class="chat-msg-media-img"
+                loading="lazy"
+                data-open-media="${escapeHtmlAttr(effectiveMediaUrl)}"
+              />
+            </div>
+          `
+          : "";
+
         return `
         <div class="chat-msg-item ${isMine ? "is-own-msg" : "is-other-msg"}" data-chat-msg-id="${escapeHtmlAttr(m.id || "")}">
-          <span class="detective-avatar-frame chat-avatar-pill">${renderAvatarHtml(m)}</span>
-          <div class="chat-msg-body">
-            <div class="chat-msg-header">
-              <span class="chat-msg-author-wrap">
-                <span class="chat-msg-author">${escapeHtml(m.userName || "Detective")}</span>
-                ${roleBadge}
-              </span>
-              <span class="chat-msg-meta-right">
-                <span class="chat-msg-time">${escapeHtml(formatRelativeTime(m.ts))}</span>
-                <button
-                  type="button"
-                  class="chat-reply-btn"
-                  data-reply-chat="${escapeHtmlAttr(m.id || "")}"
-                  data-reply-author="${escapeHtmlAttr(m.userName || "Detective")}"
-                  data-reply-text="${escapeHtmlAttr((m.text || "").slice(0, 110))}"
-                  data-chat-exhibit="${escapeHtmlAttr(exhibitId)}"
-                  title="Reply to ${escapeHtmlAttr(m.userName || "Detective")}"
-                >↩ Reply</button>
-                ${
-                  isMine && m.id
-                    ? `<button type="button" class="chat-delete-btn" data-delete-chat="${escapeHtmlAttr(m.id)}" data-chat-exhibit="${escapeHtmlAttr(exhibitId)}" title="Delete your message">×</button>`
-                    : ""
-                }
-              </span>
-            </div>
+          <span class="detective-avatar-frame chat-avatar-pill" title="${escapeHtmlAttr(m.userName || "Detective")}">${renderAvatarHtml(m)}</span>
+          <div class="chat-msg-body ${effectiveMediaUrl && !displayCaption ? "is-media-only" : ""}">
+            ${
+              !isMine
+                ? `<div class="chat-msg-author">${escapeHtml(m.userName || "Detective")}</div>`
+                : ""
+            }
             ${quotedHtml}
-            <div class="chat-msg-text">${escapeHtml(m.text)}</div>
+            ${mediaHtml}
+            <div class="chat-msg-content-line">
+              ${
+                displayCaption
+                  ? `<span class="chat-msg-text">${escapeHtml(displayCaption)}</span>`
+                  : ""
+              }
+              <span class="chat-msg-time">${escapeHtml(formatRelativeTime(m.ts))}</span>
+            </div>
+          </div>
+          <div class="chat-msg-actions">
+            <button
+              type="button"
+              class="chat-reply-btn"
+              data-reply-chat="${escapeHtmlAttr(m.id || "")}"
+              data-reply-author="${escapeHtmlAttr(m.userName || "Detective")}"
+              data-reply-text="${escapeHtmlAttr(replySnippetText)}"
+              data-chat-exhibit="${escapeHtmlAttr(exhibitId)}"
+              title="Reply"
+            >↩</button>
+            ${
+              isMine && m.id
+                ? `<button type="button" class="chat-delete-btn" data-delete-chat="${escapeHtmlAttr(m.id)}" data-chat-exhibit="${escapeHtmlAttr(exhibitId)}" title="Delete message">×</button>`
+                : ""
+            }
           </div>
         </div>
       `;
@@ -4247,17 +4409,11 @@
   function updateChatReplyBanners(activeExhibitId) {
     const r = state.replyingToChat;
     const banners = [
-      {
-        banner: document.getElementById("lbChatReplyBanner"),
-        input: document.getElementById("lbChatInput")
-      },
-      {
-        banner: document.getElementById("binderChatReplyBanner"),
-        input: document.getElementById("binderChatInput")
-      }
+      document.getElementById("lbChatReplyBanner"),
+      document.getElementById("binderChatReplyBanner")
     ];
 
-    banners.forEach(({ banner }) => {
+    banners.forEach((banner) => {
       if (!banner) return;
       if (!r || (activeExhibitId && r.exhibitId !== activeExhibitId)) {
         banner.hidden = true;
@@ -4267,8 +4423,8 @@
       banner.hidden = false;
       banner.innerHTML = `
         <div class="chat-reply-banner-info">
-          <span class="chat-reply-banner-tag">↩ REPLYING TO ${escapeHtml(r.userName || "Detective")}</span>
-          <span class="chat-reply-banner-snippet">"${escapeHtml(r.text || "")}"</span>
+          <span class="chat-reply-banner-tag">↩ Replying to ${escapeHtml(r.userName || "Detective")}</span>
+          <span class="chat-reply-banner-snippet">${escapeHtml(r.text || "📷 [GIF / Photo]")}</span>
         </div>
         <button type="button" class="chat-reply-cancel-btn" data-cancel-reply title="Cancel reply">×</button>
       `;
@@ -4280,6 +4436,258 @@
           updateChatReplyBanners(activeExhibitId);
         });
     });
+  }
+
+  function updateChatMediaPreviews() {
+    const url = state.pendingChatMediaUrl;
+    const previews = [
+      document.getElementById("lbChatMediaPreview"),
+      document.getElementById("binderChatMediaPreview")
+    ];
+
+    previews.forEach((el) => {
+      if (!el) return;
+      if (!url) {
+        el.hidden = true;
+        el.innerHTML = "";
+        return;
+      }
+      el.hidden = false;
+      el.innerHTML = `
+        <div class="chat-media-preview-inner">
+          <img src="${escapeHtmlAttr(url)}" alt="Attached preview" class="chat-media-preview-thumb" />
+          <span class="chat-media-preview-label">Ready to send (add caption or press Enter)</span>
+          <button type="button" class="chat-reply-cancel-btn" data-clear-media title="Remove attachment">×</button>
+        </div>
+      `;
+      el.querySelector("[data-clear-media]")?.addEventListener("click", () => {
+        playForensicSound("click");
+        state.pendingChatMediaUrl = null;
+        updateChatMediaPreviews();
+      });
+    });
+  }
+
+  let gifSearchDebounceTimer = null;
+
+  async function searchGiphyLive(query) {
+    const q = (query || "").trim();
+    if (!q) {
+      state.gifRemoteResults = null;
+      renderGifPickerDrawers();
+      return;
+    }
+    try {
+      const res = await fetch(
+        `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_PUBLIC_API_KEY}&q=${encodeURIComponent(
+          q
+        )}&limit=20&rating=r`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = (data.data || [])
+        .map((g) => ({
+          id: g.id,
+          title: g.title || q,
+          previewUrl:
+            g.images?.fixed_height_small?.url ||
+            g.images?.fixed_height?.url ||
+            `https://media.giphy.com/media/${g.id}/200.gif`,
+          fullUrl:
+            g.images?.fixed_height?.url ||
+            `https://media.giphy.com/media/${g.id}/giphy.gif`
+        }))
+        .filter((x) => x.id);
+      state.gifRemoteResults = items;
+      renderGifPickerDrawers();
+    } catch (_e) {
+      // Fallback to curated list silently
+    }
+  }
+
+  function getActiveExhibitIdForChat() {
+    if (state.lightboxOpen) {
+      return EXHIBITS[state.currentExhibitIndex]?.id || "EX-01";
+    }
+    const filtered = getFilteredExhibits();
+    return filtered[state.binderIndex]?.id || EXHIBITS[0]?.id || "EX-01";
+  }
+
+  function renderGifPickerDrawers() {
+    const drawers = [
+      document.getElementById("lbGifPickerDrawer"),
+      document.getElementById("binderGifPickerDrawer")
+    ];
+
+    drawers.forEach((drawer) => {
+      if (!drawer) return;
+      if (!state.gifDrawerOpen) {
+        drawer.hidden = true;
+        return;
+      }
+      drawer.hidden = false;
+
+      const cat = state.activeGifCategory || "unhinged";
+      const curated = (
+        CURATED_GIFS_BY_CATEGORY[cat] || CURATED_GIFS_BY_CATEGORY.unhinged
+      ).map((item) => ({
+        id: item.id,
+        title: item.title,
+        previewUrl: `https://media.giphy.com/media/${item.id}/200.gif`,
+        fullUrl: `https://media.giphy.com/media/${item.id}/giphy.gif`
+      }));
+
+      const list =
+        state.gifSearchQuery && Array.isArray(state.gifRemoteResults)
+          ? state.gifRemoteResults
+          : curated;
+
+      drawer.innerHTML = `
+        <div class="gif-drawer-header">
+          <input
+            type="text"
+            class="gif-search-input"
+            placeholder="Search any GIF or meme..."
+            value="${escapeHtmlAttr(state.gifSearchQuery || "")}"
+          />
+          <button type="button" class="chat-reply-cancel-btn" data-close-gif-drawer title="Close GIFs">×</button>
+        </div>
+        <div class="gif-category-tabs">
+          <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "unhinged" ? "is-active" : ""}" data-gif-cat="unhinged">🔥 Unhinged</button>
+          <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "sus" ? "is-active" : ""}" data-gif-cat="sus">🕵️ Sus / 4K</button>
+          <button type="button" class="gif-cat-btn ${!state.gifSearchQuery && cat === "cooked" ? "is-active" : ""}" data-gif-cat="cooked">💀 Cooked</button>
+        </div>
+        <div class="gif-grid">
+          ${
+            list.length
+              ? list
+                  .map(
+                    (g) => `
+                <button
+                  type="button"
+                  class="gif-grid-item"
+                  data-pick-gif-url="${escapeHtmlAttr(g.fullUrl)}"
+                  title="${escapeHtmlAttr(g.title)}"
+                >
+                  <img src="${escapeHtmlAttr(g.previewUrl)}" alt="${escapeHtmlAttr(g.title)}" loading="lazy" />
+                </button>
+              `
+                  )
+                  .join("")
+              : `<div style="grid-column:1/-1;text-align:center;padding:14px;font-size:0.7rem;color:#9ca3af;">No GIFs found for that search. Paste any direct GIF URL below!</div>`
+          }
+        </div>
+        <div class="gif-custom-url-bar">
+          <input
+            type="url"
+            class="gif-custom-url-input"
+            placeholder="Or paste ANY direct .gif / image URL here..."
+          />
+          <button type="button" class="tool-btn is-active gif-send-url-btn">Send URL</button>
+        </div>
+      `;
+
+      const searchInput = drawer.querySelector(".gif-search-input");
+      searchInput?.addEventListener("input", (e) => {
+        state.gifSearchQuery = e.target.value;
+        if (gifSearchDebounceTimer) clearTimeout(gifSearchDebounceTimer);
+        gifSearchDebounceTimer = setTimeout(() => {
+          searchGiphyLive(state.gifSearchQuery);
+        }, 280);
+      });
+
+      drawer
+        .querySelector("[data-close-gif-drawer]")
+        ?.addEventListener("click", () => {
+          playForensicSound("click");
+          state.gifDrawerOpen = false;
+          renderGifPickerDrawers();
+        });
+
+      drawer.querySelectorAll("[data-gif-cat]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          playForensicSound("click");
+          state.activeGifCategory =
+            btn.getAttribute("data-gif-cat") || "unhinged";
+          state.gifSearchQuery = "";
+          state.gifRemoteResults = null;
+          renderGifPickerDrawers();
+        });
+      });
+
+      drawer.querySelectorAll("[data-pick-gif-url]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const gifUrl = btn.getAttribute("data-pick-gif-url");
+          if (!gifUrl) return;
+          const exId = getActiveExhibitIdForChat();
+          const inputEl =
+            drawer.id === "binderGifPickerDrawer"
+              ? document.getElementById("binderChatInput")
+              : document.getElementById("lbChatInput");
+          const caption = inputEl ? inputEl.value.trim() : "";
+          if (inputEl) inputEl.value = "";
+          state.gifDrawerOpen = false;
+          renderGifPickerDrawers();
+          submitPageChatMessage(exId, caption, gifUrl);
+        });
+      });
+
+      const customUrlInput = drawer.querySelector(".gif-custom-url-input");
+      const customUrlBtn = drawer.querySelector(".gif-send-url-btn");
+      const sendCustomUrl = () => {
+        const val = (customUrlInput?.value || "").trim();
+        if (!val) return;
+        const exId = getActiveExhibitIdForChat();
+        state.gifDrawerOpen = false;
+        renderGifPickerDrawers();
+        submitPageChatMessage(exId, "", val);
+      };
+      customUrlBtn?.addEventListener("click", sendCustomUrl);
+      customUrlInput?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          sendCustomUrl();
+        }
+      });
+    });
+  }
+
+  function processChatImageOrGifFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result;
+      if (typeof dataUrl !== "string") return;
+
+      // Preserve animated GIFs directly if reasonably sized (< 700 KB)
+      if (file.type === "image/gif" && file.size <= 700 * 1024) {
+        state.pendingChatMediaUrl = dataUrl;
+        updateChatMediaPreviews();
+        return;
+      }
+
+      // Compress/resize static images so they sync fast across all users
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 540;
+        let w = img.naturalWidth || img.width || 320;
+        let h = img.naturalHeight || img.height || 320;
+        if (w > maxDim || h > maxDim) {
+          const ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.max(1, Math.round(w * ratio));
+          h = Math.max(1, Math.round(h * ratio));
+        }
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        state.pendingChatMediaUrl = c.toDataURL("image/webp", 0.82);
+        updateChatMediaPreviews();
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
   }
 
   function bindChatDeleteButtons(container) {
@@ -4318,7 +4726,8 @@
         state.replyingToChat = { id, userName, text, exhibitId };
         updateChatReplyBanners(exhibitId);
         const targetInput =
-          container.id === "binderChatFeed" || container.closest("#binderPageRight")
+          container.id === "binderChatFeed" ||
+          container.closest("#binderPageRight")
             ? document.getElementById("binderChatInput")
             : document.getElementById("lbChatInput");
         targetInput?.focus();
@@ -4345,6 +4754,16 @@
         }
       });
     });
+
+    container.querySelectorAll("[data-open-media]").forEach((imgEl) => {
+      imgEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const url = imgEl.getAttribute("data-open-media");
+        if (url && !url.startsWith("data:")) {
+          window.open(url, "_blank", "noopener");
+        }
+      });
+    });
   }
 
   function renderLightboxChat(ex) {
@@ -4361,15 +4780,14 @@
       state.replyingToChat = null;
     }
     updateChatReplyBanners(ex.id);
+    updateChatMediaPreviews();
 
     const chats = state.shared.chatsByExhibit[ex.id] || [];
     if (titleEl)
       titleEl.textContent = `${ex.id} DISCUSSION ROOM (${chats.length})`;
     if (badgeEl) badgeEl.textContent = String(chats.length);
     if (inputEl) {
-      inputEl.placeholder = `Message ${ex.id} channel as ${
-        state.userProfile?.name || "Detective"
-      }...`;
+      inputEl.placeholder = `Message ${ex.id}, paste pic/GIF...`;
     }
     if (feedEl) {
       const chatSig = `${ex.id}:${chats.length}:${chats[chats.length - 1]?.id || ""}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}`;
@@ -4382,8 +4800,20 @@
     }
   }
 
-  function submitPageChatMessage(exhibitId, text) {
-    if (!text || !exhibitId) return;
+  function submitPageChatMessage(exhibitId, text, explicitMediaUrl = null) {
+    const cleanText = (text || "").trim();
+    let mediaUrl = explicitMediaUrl || state.pendingChatMediaUrl || null;
+    let finalCaption = cleanText;
+
+    // If user pasted a direct GIF/image URL into the text box without a separate media attachment, promote it to mediaUrl
+    if (!mediaUrl && isDirectMediaUrl(cleanText)) {
+      mediaUrl = cleanText;
+      finalCaption = "";
+    }
+
+    if (!finalCaption && !mediaUrl) return;
+    if (!exhibitId) return;
+
     playForensicSound("chat");
     const replyTo =
       state.replyingToChat && state.replyingToChat.exhibitId === exhibitId
@@ -4394,12 +4824,15 @@
           }
         : null;
     state.replyingToChat = null;
+    state.pendingChatMediaUrl = null;
     updateChatReplyBanners(exhibitId);
+    updateChatMediaPreviews();
 
     dispatchSharedAction({
       action: "chat_message",
       exhibitId,
-      text,
+      text: finalCaption,
+      mediaUrl,
       replyTo,
       userId: state.userProfile.id,
       userName: state.userProfile.name,
@@ -5322,13 +5755,51 @@
       }, 1400);
     });
 
+    document
+      .getElementById("lbChatUploadBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        document.getElementById("lbChatFileInput")?.click();
+      });
+
+    document
+      .getElementById("lbChatFileInput")
+      ?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (file) processChatImageOrGifFile(file);
+        e.target.value = "";
+      });
+
+    document.getElementById("lbChatGifBtn")?.addEventListener("click", () => {
+      playForensicSound("click");
+      state.gifDrawerOpen = !state.gifDrawerOpen;
+      renderGifPickerDrawers();
+    });
+
+    document.getElementById("lbChatInput")?.addEventListener("paste", (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            processChatImageOrGifFile(file);
+            break;
+          }
+        }
+      }
+    });
+
     document.getElementById("lbChatForm")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const ex = EXHIBITS[state.currentExhibitIndex];
       const input = document.getElementById("lbChatInput");
-      if (!ex || !input || !input.value.trim()) return;
-      submitPageChatMessage(ex.id, input.value.trim());
-      input.value = "";
+      if (!ex) return;
+      const val = input ? input.value.trim() : "";
+      if (!val && !state.pendingChatMediaUrl) return;
+      submitPageChatMessage(ex.id, val);
+      if (input) input.value = "";
     });
 
     bindViewportInteractions();

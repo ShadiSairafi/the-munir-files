@@ -312,7 +312,11 @@ module.exports = async function handler(req, res) {
         store.auditLog.unshift(entry);
       }
       persistNeeded = true;
-    } else if (action === "chat_message" && exhibitId && (payload.text || payload.chatMsg)) {
+    } else if (
+      action === "chat_message" &&
+      exhibitId &&
+      (payload.text || payload.mediaUrl || payload.chatMsg)
+    ) {
       if (!store.chatsByExhibit[exhibitId]) {
         store.chatsByExhibit[exhibitId] = [];
       }
@@ -323,6 +327,7 @@ module.exports = async function handler(req, res) {
         avatarId,
         customAvatarUrl,
         text: String(payload.text || "").trim().slice(0, 400),
+        mediaUrl: payload.mediaUrl || null,
         replyTo: payload.replyTo || null,
         ts: now
       };
