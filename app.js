@@ -2799,7 +2799,7 @@
           <div class="chat-reply-banner" ${includeIds ? 'id="binderChatReplyBanner"' : ""} hidden></div>
           <div class="chat-media-preview" ${includeIds ? 'id="binderChatMediaPreview"' : ""} hidden></div>
           <div class="chat-gif-drawer" ${includeIds ? 'id="binderGifPickerDrawer"' : ""} hidden></div>
-          <form class="page-chat-form" ${includeIds ? 'id="binderChatForm"' : ""}>
+          <form class="page-chat-form" ${includeIds ? 'id="binderChatForm"' : ""} autocomplete="off">
             <input
               type="file"
               ${includeIds ? 'id="binderChatFileInput"' : ""}
@@ -2828,6 +2828,9 @@
               class="page-chat-input"
               placeholder="Message, paste pic/GIF, or drop link..."
               maxlength="400"
+              autocomplete="off"
+              autocorrect="off"
+              data-form-type="other"
             />
             <button type="submit" class="tool-btn is-active">
               ${ICON("send", "icon-sm")}

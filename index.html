@@ -613,7 +613,7 @@
             <div id="lbChatReplyBanner" class="chat-reply-banner" hidden></div>
             <div id="lbChatMediaPreview" class="chat-media-preview" hidden></div>
             <div id="lbGifPickerDrawer" class="chat-gif-drawer" hidden></div>
-            <form class="page-chat-form" id="lbChatForm">
+            <form class="page-chat-form" id="lbChatForm" autocomplete="off">
               <input
                 type="file"
                 id="lbChatFileInput"
@@ -642,6 +642,9 @@
                 class="page-chat-input"
                 placeholder="Message, paste pic/GIF, or drop link..."
                 maxlength="400"
+                autocomplete="off"
+                autocorrect="off"
+                data-form-type="other"
               />
               <button type="submit" class="tool-btn is-active">
                 <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
