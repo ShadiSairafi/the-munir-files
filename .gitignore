@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+shared_state.json
+.DS_Store
+.vercel/
+node_modules/
