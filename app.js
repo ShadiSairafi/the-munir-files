@@ -130,8 +130,7 @@
   }
 
   function getSavedSidebarTab() {
-    const isValid = (v) =>
-      v === "dossier" || v === "chat" || v === "global-chat" || v === "log";
+    const isValid = (v) => v === "dossier" || v === "chat" || v === "log";
     const cVal = getCookieVal(STORAGE_KEYS.SIDEBAR_TAB_COOKIE);
     if (isValid(cVal)) return cVal;
     try {
@@ -3398,6 +3397,9 @@
       Math.min(EXHIBITS.length - 1, index)
     );
     state.lightboxOpen = true;
+    toggleGlobalChatDrawer(false);
+    const fabBtn = document.getElementById("globalChatFabBtn");
+    if (fabBtn) fabBtn.hidden = true;
 
     const lockCheckbox = document.getElementById("lbLockZoomCheckbox");
     if (lockCheckbox) {
@@ -3443,6 +3445,8 @@
       dialog.close();
     }
     state.lightboxOpen = false;
+    const fabBtn = document.getElementById("globalChatFabBtn");
+    if (fabBtn) fabBtn.hidden = false;
     stopAutoplay();
     sendPresenceHeartbeat();
   }
@@ -5144,6 +5148,12 @@
     const topBtn = document.getElementById("openGlobalChatBtn");
 
     if (drawer) {
+      drawer.hidden = !nextOpen;
+      if (nextOpen) {
+        drawer.removeAttribute("hidden");
+      } else {
+        drawer.setAttribute("hidden", "");
+      }
       drawer.classList.toggle("is-open", nextOpen);
       drawer.setAttribute("aria-hidden", nextOpen ? "false" : "true");
     }
@@ -5207,9 +5217,7 @@
 
   function switchSidebarTab(tabId, persistToCookie = true) {
     const validTab =
-      tabId === "chat" || tabId === "global-chat" || tabId === "log"
-        ? tabId
-        : "dossier";
+      tabId === "chat" || tabId === "log" ? tabId : "dossier";
     state.activeSidebarTab = validTab;
     if (persistToCookie) {
       saveSidebarTabCookie(validTab);
@@ -5229,15 +5237,8 @@
       .getElementById("sidebarPanelChat")
       ?.classList.toggle("is-active", validTab === "chat");
     document
-      .getElementById("sidebarPanelGlobalChat")
-      ?.classList.toggle("is-active", validTab === "global-chat");
-    document
       .getElementById("sidebarPanelLog")
       ?.classList.toggle("is-active", validTab === "log");
-
-    if (validTab === "global-chat") {
-      renderGlobalChat();
-    }
   }
 
   // ============================================================================
@@ -5310,10 +5311,9 @@
         const auditModal = document.getElementById("auditLogModal");
         if (auditModal && auditModal.open) auditModal.close();
         if (state.lightboxOpen) {
-          switchSidebarTab("global-chat", true);
-        } else {
-          toggleGlobalChatDrawer(true);
+          closeLightbox();
         }
+        toggleGlobalChatDrawer(true);
       });
     });
   }
