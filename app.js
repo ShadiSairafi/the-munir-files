@@ -307,6 +307,8 @@
       marksByExhibit: {},
       notesByExhibit: {},
       poiOverrides: {},
+      deletedIds: {},
+      clearedAtByExhibit: {},
       cursorsByExhibit: {},
       presenceByUser: {},
       auditLog: []
@@ -385,8 +387,10 @@
   // Continuous speed-reactive pen/pencil drawing sound state
   let activePenSource = null;
   let activePenGain = null;
+  let activePenFilter = null;
   let activePenHtmlAudio = null;
   let penIdleSilenceTimer = null;
+  let paperGrainBuffer = null;
 
   function ensureAudioContext() {
     if (!audioCtx) {
@@ -403,6 +407,36 @@
       preloadFoleyAssets();
     }
     return audioCtx;
+  }
+
+  function getOrCreatePaperGrainBuffer(ctx) {
+    if (paperGrainBuffer) return paperGrainBuffer;
+    const sampleRate = ctx.sampleRate || 44100;
+    const length = Math.floor(sampleRate * 2.4);
+    const buffer = ctx.createBuffer(1, length, sampleRate);
+    const data = buffer.getChannelData(0);
+
+    // Generate warm brown/pink paper-fiber noise with subtle organic micro-grain
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    let lastOut = 0;
+    for (let i = 0; i < length; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + white * 0.0555179;
+      b1 = 0.99332 * b1 + white * 0.0750759;
+      b2 = 0.96900 * b2 + white * 0.1538520;
+      b3 = 0.86650 * b3 + white * 0.3104856;
+      b4 = 0.55000 * b4 + white * 0.5329522;
+      b5 = -0.7616 * b5 - white * 0.0168980;
+      const pink = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.045;
+      b6 = white * 0.115926;
+
+      // Blend with warm brown integration so there is zero harshness
+      lastOut = (lastOut + 0.06 * white) / 1.06;
+      const fiberMod = 0.78 + 0.22 * Math.sin(i * 0.0031) * Math.cos(i * 0.00073);
+      data[i] = (pink * 0.65 + lastOut * 0.45) * fiberMod;
+    }
+    paperGrainBuffer = buffer;
+    return buffer;
   }
 
   function preloadFoleyAssets() {
@@ -442,69 +476,66 @@
     stopContinuousPenSound();
     try {
       const ctx = ensureAudioContext();
-      const buffers = (decodedFoleyBuffers.pencil_loop || []).filter(Boolean);
-      if (ctx && buffers.length > 0) {
-        const src = ctx.createBufferSource();
-        src.buffer = buffers[0];
-        src.loop = true;
-        // Start at a random offset inside the 2.3s loop so every stroke has fresh paper texture
-        const offset = Math.random() * Math.max(0.1, buffers[0].duration - 0.2);
-        src.playbackRate.setValueAtTime(0.96, ctx.currentTime);
+      if (!ctx) return;
+      const buf = getOrCreatePaperGrainBuffer(ctx);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const offset = Math.random() * 1.8;
 
-        const gainNode = ctx.createGain();
-        // Start at soft paper contact (0.04) so there is zero thud and smooth ramp-up on movement
-        gainNode.gain.setValueAtTime(0.04, ctx.currentTime);
+      // Warm paper resonance bandpass + soft lowpass rolloff (no high-pitched hiss)
+      const bandFilter = ctx.createBiquadFilter();
+      bandFilter.type = "bandpass";
+      bandFilter.frequency.setValueAtTime(520, ctx.currentTime);
+      bandFilter.Q.setValueAtTime(0.9, ctx.currentTime);
 
-        src.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        src.start(0, offset);
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.setValueAtTime(1120, ctx.currentTime);
 
-        activePenSource = src;
-        activePenGain = gainNode;
-        return;
-      }
+      const gainNode = ctx.createGain();
+      // Start completely silent until the pen actually moves across the paper
+      gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
 
-      const pool = (htmlAudioPool.pencil_loop || []).filter(Boolean);
-      if (pool.length > 0) {
-        const clone = pool[0].cloneNode();
-        clone.loop = true;
-        clone.volume = 0.08;
-        clone.play().catch(() => {});
-        activePenHtmlAudio = clone;
-      }
+      src.connect(bandFilter);
+      bandFilter.connect(lowpass);
+      lowpass.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      src.start(0, offset);
+
+      activePenSource = src;
+      activePenFilter = bandFilter;
+      activePenGain = gainNode;
     } catch (_e) {}
   }
 
   function updateContinuousPenSound(moveDistPx) {
     if (!state.soundEnabled) return;
-    if (!activePenSource && !activePenHtmlAudio) {
+    if (!activePenSource) {
       startContinuousPenSound();
     }
     try {
-      const speed = Math.max(0, Math.min(45, moveDistPx));
-      const targetVol = Math.min(0.78, 0.28 + speed * 0.014);
-      const targetRate = Math.max(0.88, Math.min(1.2, 0.94 + speed * 0.0065));
+      const speed = Math.max(0, Math.min(36, moveDistPx));
+      // Subtle, soft graphite-on-manila-paper whisper (2% to 6.5% max gain)
+      const targetVol = Math.min(0.065, 0.015 + speed * 0.0014);
+      const targetFreq = Math.min(740, 460 + speed * 7.5);
 
       if (activePenGain && audioCtx) {
         const now = audioCtx.currentTime;
-        activePenGain.gain.setTargetAtTime(targetVol, now, 0.028);
-        if (activePenSource) {
-          activePenSource.playbackRate.setTargetAtTime(targetRate, now, 0.035);
+        activePenGain.gain.setTargetAtTime(targetVol, now, 0.018);
+        if (activePenFilter) {
+          activePenFilter.frequency.setTargetAtTime(targetFreq, now, 0.024);
         }
-      } else if (activePenHtmlAudio) {
-        activePenHtmlAudio.volume = Math.min(1, targetVol);
-        activePenHtmlAudio.playbackRate = targetRate;
       }
 
       if (penIdleSilenceTimer) clearTimeout(penIdleSilenceTimer);
       penIdleSilenceTimer = setTimeout(() => {
         if (activePenGain && audioCtx) {
           const now = audioCtx.currentTime;
-          activePenGain.gain.setTargetAtTime(0.015, now, 0.06);
-        } else if (activePenHtmlAudio) {
-          activePenHtmlAudio.volume = 0.02;
+          // Fade to complete silence as soon as the hand pauses
+          activePenGain.gain.setTargetAtTime(0.0001, now, 0.02);
         }
-      }, 210);
+      }, 48);
     } catch (_e) {}
   }
 
@@ -518,17 +549,17 @@
       const gain = activePenGain;
       activePenSource = null;
       activePenGain = null;
+      activePenFilter = null;
       try {
         if (gain && audioCtx) {
           const now = audioCtx.currentTime;
-          gain.gain.cancelScheduledValues(now);
-          gain.gain.setTargetAtTime(0.0001, now, 0.015);
+          gain.gain.setTargetAtTime(0.0001, now, 0.012);
           setTimeout(() => {
             try {
               src.stop();
               src.disconnect();
             } catch (_e) {}
-          }, 45);
+          }, 35);
         } else {
           src.stop();
           src.disconnect();
@@ -854,6 +885,8 @@
           marksByExhibit: state.shared.marksByExhibit,
           notesByExhibit: state.shared.notesByExhibit,
           poiOverrides: state.shared.poiOverrides,
+          deletedIds: state.shared.deletedIds,
+          clearedAtByExhibit: state.shared.clearedAtByExhibit,
           auditLog: (state.shared.auditLog || []).slice(0, 200)
         };
         localStorage.setItem(
@@ -1116,26 +1149,149 @@
   }
 
   // ============================================================================
-  // MULTI-USER STATE SYNC (/api/state + BroadcastChannel + localStorage)
+  // MULTI-USER STATE SYNC (CRDT UNION-MERGE + TOMBSTONES + SERVER HEALING)
   // ============================================================================
-  function mergeSharedState(incoming) {
+  let persistentPostInFlightCount = 0;
+  let serverHealTimer = null;
+
+  function buildClientSyncBundle() {
+    return {
+      deletedIds: state.shared.deletedIds || {},
+      clearedAtByExhibit: state.shared.clearedAtByExhibit || {},
+      marksByExhibit: state.shared.marksByExhibit || {},
+      chatsByExhibit: state.shared.chatsByExhibit || {},
+      notesByExhibit: state.shared.notesByExhibit || {},
+      poiOverrides: state.shared.poiOverrides || {}
+    };
+  }
+
+  function scheduleServerHealPush() {
+    if (serverHealTimer || persistentPostInFlightCount > 0) return;
+    serverHealTimer = setTimeout(async () => {
+      serverHealTimer = null;
+      if (persistentPostInFlightCount > 0) return;
+      try {
+        await fetch("/api/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "sync_bundle",
+            senderId: state.userProfile?.id,
+            userId: state.userProfile?.id,
+            userName: state.userProfile?.name,
+            avatarId: state.userProfile?.avatarId,
+            customAvatarUrl: state.userProfile?.customAvatarUrl,
+            syncBundle: buildClientSyncBundle()
+          })
+        });
+      } catch (_e) {}
+    }, 180);
+  }
+
+  function mergeSharedState(incoming, fromServer = false) {
     if (!incoming || typeof incoming !== "object") return;
 
-    if (incoming.chatsByExhibit && typeof incoming.chatsByExhibit === "object") {
-      for (const [exId, list] of Object.entries(incoming.chatsByExhibit)) {
-        if (Array.isArray(list)) {
-          state.shared.chatsByExhibit[exId] = list
-            .slice()
-            .sort((a, b) => a.ts - b.ts);
+    if (!state.shared.deletedIds) state.shared.deletedIds = {};
+    if (!state.shared.clearedAtByExhibit) state.shared.clearedAtByExhibit = {};
+
+    let serverMissingLocalData = false;
+
+    // 1. Merge deletion tombstones first so deleted items never resurrect
+    if (incoming.deletedIds && typeof incoming.deletedIds === "object") {
+      for (const [delId, delTs] of Object.entries(incoming.deletedIds)) {
+        const curTs = state.shared.deletedIds[delId] || 0;
+        const incTs = Number(delTs) || 1;
+        if (incTs > curTs) {
+          state.shared.deletedIds[delId] = incTs;
         }
       }
     }
 
-    if (incoming.marksByExhibit && typeof incoming.marksByExhibit === "object") {
-      for (const [exId, list] of Object.entries(incoming.marksByExhibit)) {
-        if (Array.isArray(list)) {
-          state.shared.marksByExhibit[exId] = list;
+    // 2. Merge per-exhibit clear timestamps
+    if (
+      incoming.clearedAtByExhibit &&
+      typeof incoming.clearedAtByExhibit === "object"
+    ) {
+      for (const [exId, clrTs] of Object.entries(incoming.clearedAtByExhibit)) {
+        const curTs = state.shared.clearedAtByExhibit[exId] || 0;
+        const incTs = Number(clrTs) || 0;
+        if (incTs > curTs) {
+          state.shared.clearedAtByExhibit[exId] = incTs;
         }
+      }
+    }
+
+    // 3. CRDT Union-Merge for chatsByExhibit (keyed by chat.id)
+    const chatExIds = new Set([
+      ...Object.keys(state.shared.chatsByExhibit || {}),
+      ...Object.keys(incoming.chatsByExhibit || {})
+    ]);
+    for (const exId of chatExIds) {
+      const localList = Array.isArray(state.shared.chatsByExhibit[exId])
+        ? state.shared.chatsByExhibit[exId]
+        : [];
+      const incList =
+        incoming.chatsByExhibit && Array.isArray(incoming.chatsByExhibit[exId])
+          ? incoming.chatsByExhibit[exId]
+          : [];
+      const incIdSet = new Set(incList.map((c) => c && c.id).filter(Boolean));
+      const mergedMap = new Map();
+
+      for (const c of [...localList, ...incList]) {
+        if (!c || !c.id) continue;
+        if (state.shared.deletedIds[c.id]) continue;
+        const prev = mergedMap.get(c.id);
+        if (!prev || (c.ts || 0) >= (prev.ts || 0)) {
+          mergedMap.set(c.id, c);
+        }
+      }
+
+      const mergedArr = Array.from(mergedMap.values()).sort(
+        (a, b) => (a.ts || 0) - (b.ts || 0)
+      );
+      state.shared.chatsByExhibit[exId] = mergedArr;
+
+      if (fromServer && mergedArr.some((c) => !incIdSet.has(c.id))) {
+        serverMissingLocalData = true;
+      }
+    }
+
+    // 4. CRDT Union-Merge for marksByExhibit (keyed by mark.id)
+    const markExIds = new Set([
+      ...Object.keys(state.shared.marksByExhibit || {}),
+      ...Object.keys(incoming.marksByExhibit || {})
+    ]);
+    for (const exId of markExIds) {
+      const localList = Array.isArray(state.shared.marksByExhibit[exId])
+        ? state.shared.marksByExhibit[exId]
+        : [];
+      const incList =
+        incoming.marksByExhibit && Array.isArray(incoming.marksByExhibit[exId])
+          ? incoming.marksByExhibit[exId]
+          : [];
+      const incIdSet = new Set(incList.map((m) => m && m.id).filter(Boolean));
+      const clearedAt = state.shared.clearedAtByExhibit[exId] || 0;
+      const mergedMap = new Map();
+
+      for (const m of [...localList, ...incList]) {
+        if (!m || !m.id) continue;
+        if (state.shared.deletedIds[m.id]) continue;
+        if (clearedAt > 0 && (m.ts || 0) <= clearedAt) continue;
+        const prev = mergedMap.get(m.id);
+        const mVerTs = m.updatedTs || m.ts || 0;
+        const prevVerTs = prev ? prev.updatedTs || prev.ts || 0 : -1;
+        if (!prev || mVerTs >= prevVerTs) {
+          mergedMap.set(m.id, m);
+        }
+      }
+
+      const mergedArr = Array.from(mergedMap.values()).sort(
+        (a, b) => (a.ts || 0) - (b.ts || 0)
+      );
+      state.shared.marksByExhibit[exId] = mergedArr;
+
+      if (fromServer && mergedArr.some((m) => !incIdSet.has(m.id))) {
+        serverMissingLocalData = true;
       }
     }
 
@@ -1162,16 +1318,18 @@
       if (!state.shared.cursorsByExhibit) state.shared.cursorsByExhibit = {};
       const now = Date.now();
       for (const [exId, cursorMap] of Object.entries(incoming.cursorsByExhibit)) {
-        if (cursorMap && typeof cursorMap === "object") {
-          if (!state.shared.cursorsByExhibit[exId]) {
-            state.shared.cursorsByExhibit[exId] = {};
-          }
-          for (const [uid, cObj] of Object.entries(cursorMap)) {
-            if (cObj && now - (cObj.ts || 0) <= 14000) {
+        if (cursorMap && typeof cursorMap !== "object") continue;
+        if (!state.shared.cursorsByExhibit[exId]) {
+          state.shared.cursorsByExhibit[exId] = {};
+        }
+        for (const [uid, cObj] of Object.entries(cursorMap || {})) {
+          if (cObj && now - (cObj.ts || 0) <= 14000) {
+            const cur = state.shared.cursorsByExhibit[exId][uid];
+            if (!cur || (cObj.ts || 0) >= (cur.ts || 0)) {
               state.shared.cursorsByExhibit[exId][uid] = cObj;
-            } else {
-              delete state.shared.cursorsByExhibit[exId][uid];
             }
+          } else {
+            delete state.shared.cursorsByExhibit[exId][uid];
           }
         }
       }
@@ -1198,15 +1356,23 @@
 
     if (Array.isArray(incoming.auditLog)) {
       const map = new Map();
-      (state.shared.auditLog || []).forEach((e) => map.set(e.id, e));
-      incoming.auditLog.forEach((e) => map.set(e.id, e));
+      (state.shared.auditLog || []).forEach((e) => {
+        if (e && e.id) map.set(e.id, e);
+      });
+      incoming.auditLog.forEach((e) => {
+        if (e && e.id) map.set(e.id, e);
+      });
       state.shared.auditLog = Array.from(map.values())
-        .sort((a, b) => b.ts - a.ts)
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0))
         .slice(0, 350);
     }
 
     saveSharedCache();
     refreshLiveCollaborativeViews();
+
+    if (fromServer && serverMissingLocalData) {
+      scheduleServerHealPush();
+    }
   }
 
   function applyIncomingEphemeral(delta) {
@@ -1278,7 +1444,7 @@
   let queuedCursorPayload = null;
 
   async function flushEphemeralPost(payload) {
-    if (ephemeralPostInFlight) {
+    if (ephemeralPostInFlight || persistentPostInFlightCount > 0) {
       if (payload.action === "cursor_update") {
         queuedCursorPayload = payload;
       }
@@ -1300,7 +1466,7 @@
     } catch (_e) {
     } finally {
       ephemeralPostInFlight = false;
-      if (queuedCursorPayload) {
+      if (queuedCursorPayload && persistentPostInFlightCount === 0) {
         const next = queuedCursorPayload;
         queuedCursorPayload = null;
         flushEphemeralPost(next);
@@ -1348,6 +1514,9 @@
       renderOnlineUsersWidget();
       return;
     }
+    if (!forceFull && (state.isDrawingMark || persistentPostInFlightCount > 0)) {
+      return;
+    }
     if (fetchInFlight) return;
     fetchInFlight = true;
     try {
@@ -1364,7 +1533,7 @@
           state.sharedVersion = data.version;
         }
         if (!data.unchanged && data.state) {
-          mergeSharedState(data.state);
+          mergeSharedState(data.state, true);
         } else {
           renderOnlineUsersWidget();
         }
@@ -1398,7 +1567,7 @@
             return;
           }
           if (payload.state) {
-            mergeSharedState(payload.state);
+            mergeSharedState(payload.state, true);
           }
         } catch (_err) {}
       };
@@ -1425,7 +1594,10 @@
 
     const now = Date.now();
     const uid = () =>
-      now.toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+      now.toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+
+    if (!state.shared.deletedIds) state.shared.deletedIds = {};
+    if (!state.shared.clearedAtByExhibit) state.shared.clearedAtByExhibit = {};
 
     const {
       action,
@@ -1437,7 +1609,7 @@
     } = payload;
 
     if (action === "log_event") {
-      state.shared.auditLog.unshift({
+      const entry = {
         id: uid(),
         type: payload.eventType || "entry",
         userId,
@@ -1447,7 +1619,9 @@
         exhibitId: exhibitId || null,
         detail: payload.detail || "Activity recorded",
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(entry);
+      payload.auditEntry = entry;
     } else if (action === "chat_message" && exhibitId && payload.text) {
       if (!state.shared.chatsByExhibit[exhibitId]) {
         state.shared.chatsByExhibit[exhibitId] = [];
@@ -1462,7 +1636,7 @@
         ts: now
       };
       state.shared.chatsByExhibit[exhibitId].push(msg);
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "chat",
         userId,
@@ -1472,17 +1646,21 @@
         exhibitId,
         detail: `Commented on ${exhibitId}: "${msg.text.slice(0, 70)}"`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.chatMsg = msg;
+      payload.auditEntry = auditEntry;
     } else if (
       action === "delete_chat_message" &&
       exhibitId &&
       payload.messageId
     ) {
+      state.shared.deletedIds[payload.messageId] = now;
       const list = state.shared.chatsByExhibit[exhibitId] || [];
       state.shared.chatsByExhibit[exhibitId] = list.filter(
         (m) => m.id !== payload.messageId
       );
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "chat",
         userId,
@@ -1492,7 +1670,10 @@
         exhibitId,
         detail: `Deleted own chat message on ${exhibitId}`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.deletedTs = now;
+      payload.auditEntry = auditEntry;
     } else if (action === "add_mark" && exhibitId && payload.mark) {
       if (!state.shared.marksByExhibit[exhibitId]) {
         state.shared.marksByExhibit[exhibitId] = [];
@@ -1505,7 +1686,7 @@
           : "redact";
 
       const newMark = {
-        id: uid(),
+        id: payload.mark.id || uid(),
         type: markType,
         x: payload.mark.x,
         y: payload.mark.y,
@@ -1521,10 +1702,11 @@
         userName,
         avatarId,
         customAvatarUrl,
-        ts: now
+        ts: now,
+        updatedTs: now
       };
       state.shared.marksByExhibit[exhibitId].push(newMark);
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "edit",
         userId,
@@ -1539,7 +1721,10 @@
               } on ${exhibitId}`
             : `Added forensic ${markType.toUpperCase()} box on ${exhibitId}`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.mark = newMark;
+      payload.auditEntry = auditEntry;
     } else if (
       action === "update_mark" &&
       exhibitId &&
@@ -1555,14 +1740,16 @@
         if (typeof payload.patch.h === "number") target.h = payload.patch.h;
         if (payload.patch.color) target.color = payload.patch.color;
         if (payload.patch.label !== undefined) target.label = payload.patch.label;
-        target.ts = now;
+        target.updatedTs = now;
       }
+      payload.updatedTs = now;
     } else if (action === "delete_mark" && exhibitId && payload.markId) {
+      state.shared.deletedIds[payload.markId] = now;
       const list = state.shared.marksByExhibit[exhibitId] || [];
       state.shared.marksByExhibit[exhibitId] = list.filter(
         (m) => m.id !== payload.markId
       );
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "edit",
         userId,
@@ -1572,10 +1759,18 @@
         exhibitId,
         detail: `Removed a forensic mark on ${exhibitId}`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.deletedTs = now;
+      payload.auditEntry = auditEntry;
     } else if (action === "clear_marks" && exhibitId) {
+      const existingMarks = state.shared.marksByExhibit[exhibitId] || [];
+      existingMarks.forEach((m) => {
+        if (m && m.id) state.shared.deletedIds[m.id] = now;
+      });
+      state.shared.clearedAtByExhibit[exhibitId] = now;
       state.shared.marksByExhibit[exhibitId] = [];
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "edit",
         userId,
@@ -1585,14 +1780,17 @@
         exhibitId,
         detail: `Cleared forensic marks on ${exhibitId}`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.clearedTs = now;
+      payload.auditEntry = auditEntry;
     } else if (action === "save_note" && exhibitId) {
       state.shared.notesByExhibit[exhibitId] = {
         text: String(payload.noteText || "").slice(0, 1200),
         updatedBy: userName,
         ts: now
       };
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "edit",
         userId,
@@ -1602,7 +1800,9 @@
         exhibitId,
         detail: `Updated shared investigator sticky note on ${exhibitId}`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.auditEntry = auditEntry;
     } else if (action === "update_poi" && payload.poiId && payload.poiData) {
       if (!state.shared.poiOverrides) state.shared.poiOverrides = {};
       state.shared.poiOverrides[payload.poiId] = {
@@ -1610,7 +1810,7 @@
         updatedBy: userName,
         ts: now
       };
-      state.shared.auditLog.unshift({
+      const auditEntry = {
         id: uid(),
         type: "identity",
         userId,
@@ -1622,7 +1822,9 @@
           payload.poiData.realName || payload.poiId
         }`,
         ts: now
-      });
+      };
+      state.shared.auditLog.unshift(auditEntry);
+      payload.auditEntry = auditEntry;
     }
 
     saveSharedCache();
@@ -1638,13 +1840,15 @@
       } catch (_e) {}
     }
 
+    persistentPostInFlightCount += 1;
     try {
       const res = await fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payload,
-          senderId: state.userProfile?.id || userId
+          senderId: state.userProfile?.id || userId,
+          syncBundle: buildClientSyncBundle()
         })
       });
       if (res.ok) {
@@ -1654,11 +1858,14 @@
             state.sharedVersion = data.version;
           }
           if (data.state) {
-            mergeSharedState(data.state);
+            mergeSharedState(data.state, true);
           }
         }
       }
-    } catch (_e) {}
+    } catch (_e) {
+    } finally {
+      persistentPostInFlightCount = Math.max(0, persistentPostInFlightCount - 1);
+    }
   }
 
   function getCurrentUserLocationInfo() {
@@ -3615,7 +3822,7 @@
   function broadcastCursorPosition(normX, normY, activePoints = null, force = false) {
     if (!state.lightboxOpen || !state.drawMode || !state.userProfile) return;
     const now = Date.now();
-    if (!force && now - state.lastCursorBroadcastTs < 65) return;
+    if (!force && now - state.lastCursorBroadcastTs < 110) return;
     state.lastCursorBroadcastTs = now;
 
     const ex = EXHIBITS[state.currentExhibitIndex];
@@ -5451,7 +5658,7 @@
           Number(((py - boxY) / boxH).toFixed(4))
         ]);
 
-        broadcastCursorPosition(endX, endY, null, true);
+        queuedCursorPayload = null;
         dispatchSharedAction({
           action: "add_mark",
           exhibitId: ex.id,

@@ -1,6 +1,8 @@
 /**
  * Vercel Serverless API Endpoint: /api/state
- * Handles ultra-fast real-time multi-user state synchronization for THE MUNIR FILES:
+ * Handles real-time multi-user state synchronization for THE MUNIR FILES with:
+ * - CRDT Union-Merge by ID + Tombstone tracking (deletedIds, clearedAtByExhibit)
+ * - Cross-container state healing (syncBundle) + /tmp persistence across warm invocations
  * - Online detective presence stack (presence_ping, presence_leave)
  * - Live multi-user drawing cursors & active strokes (cursor_update, cursor_leave)
  * - Shared vector pencil strokes, redactions, & highlights (add_mark, update_mark, delete_mark, clear_marks)
@@ -8,28 +10,184 @@
  * - Shared investigator sticky notes & POI overrides (save_note, update_poi, log_event)
  */
 
-if (!globalThis.__MUNIR_SHARED_STATE__) {
-  globalThis.__MUNIR_SHARED_STATE__ = {
+const fs = require("fs");
+const TMP_STATE_PATH = "/tmp/munir_shared_state_v2.json";
+
+function createDefaultStore() {
+  return {
     version: 1,
     chatsByExhibit: {},
     marksByExhibit: {},
     notesByExhibit: {},
     poiOverrides: {},
+    deletedIds: {},
+    clearedAtByExhibit: {},
     cursorsByExhibit: {},
     presenceByUser: {},
     auditLog: []
   };
 }
 
+if (!globalThis.__MUNIR_SHARED_STATE__) {
+  const initial = createDefaultStore();
+  try {
+    if (fs.existsSync(TMP_STATE_PATH)) {
+      const raw = fs.readFileSync(TMP_STATE_PATH, "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        Object.assign(initial, parsed);
+      }
+    }
+  } catch (_e) {}
+  globalThis.__MUNIR_SHARED_STATE__ = initial;
+}
+
+function saveTmpStore(store) {
+  try {
+    const snapshot = {
+      version: store.version,
+      chatsByExhibit: store.chatsByExhibit,
+      marksByExhibit: store.marksByExhibit,
+      notesByExhibit: store.notesByExhibit,
+      poiOverrides: store.poiOverrides,
+      deletedIds: store.deletedIds,
+      clearedAtByExhibit: store.clearedAtByExhibit,
+      auditLog: (store.auditLog || []).slice(0, 350)
+    };
+    fs.writeFileSync(TMP_STATE_PATH, JSON.stringify(snapshot), "utf8");
+  } catch (_e) {}
+}
+
 function uid(now) {
-  return now.toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+  return now.toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
+function mergeSyncBundleIntoStore(store, bundle) {
+  if (!bundle || typeof bundle !== "object") return false;
+  let changed = false;
+
+  if (!store.deletedIds) store.deletedIds = {};
+  if (!store.clearedAtByExhibit) store.clearedAtByExhibit = {};
+
+  if (bundle.deletedIds && typeof bundle.deletedIds === "object") {
+    for (const [delId, delTs] of Object.entries(bundle.deletedIds)) {
+      const incTs = Number(delTs) || 1;
+      if (!store.deletedIds[delId] || incTs > store.deletedIds[delId]) {
+        store.deletedIds[delId] = incTs;
+        changed = true;
+      }
+    }
+  }
+
+  if (
+    bundle.clearedAtByExhibit &&
+    typeof bundle.clearedAtByExhibit === "object"
+  ) {
+    for (const [exId, clrTs] of Object.entries(bundle.clearedAtByExhibit)) {
+      const incTs = Number(clrTs) || 0;
+      if (
+        !store.clearedAtByExhibit[exId] ||
+        incTs > store.clearedAtByExhibit[exId]
+      ) {
+        store.clearedAtByExhibit[exId] = incTs;
+        changed = true;
+      }
+    }
+  }
+
+  // Union-merge marksByExhibit by mark.id with tombstones
+  const allMarkExIds = new Set([
+    ...Object.keys(store.marksByExhibit || {}),
+    ...Object.keys(bundle.marksByExhibit || {})
+  ]);
+  for (const exId of allMarkExIds) {
+    const curList = Array.isArray(store.marksByExhibit[exId])
+      ? store.marksByExhibit[exId]
+      : [];
+    const incList =
+      bundle.marksByExhibit && Array.isArray(bundle.marksByExhibit[exId])
+        ? bundle.marksByExhibit[exId]
+        : [];
+    const clearedAt = store.clearedAtByExhibit[exId] || 0;
+    const map = new Map();
+
+    for (const m of [...curList, ...incList]) {
+      if (!m || !m.id) continue;
+      if (store.deletedIds[m.id]) continue;
+      if (clearedAt > 0 && (m.ts || 0) <= clearedAt) continue;
+      const prev = map.get(m.id);
+      const mVer = m.updatedTs || m.ts || 0;
+      const prevVer = prev ? prev.updatedTs || prev.ts || 0 : -1;
+      if (!prev || mVer >= prevVer) {
+        map.set(m.id, m);
+      }
+    }
+
+    const merged = Array.from(map.values()).sort(
+      (a, b) => (a.ts || 0) - (b.ts || 0)
+    );
+    if (merged.length !== curList.length) changed = true;
+    store.marksByExhibit[exId] = merged;
+  }
+
+  // Union-merge chatsByExhibit by chat.id with tombstones
+  const allChatExIds = new Set([
+    ...Object.keys(store.chatsByExhibit || {}),
+    ...Object.keys(bundle.chatsByExhibit || {})
+  ]);
+  for (const exId of allChatExIds) {
+    const curList = Array.isArray(store.chatsByExhibit[exId])
+      ? store.chatsByExhibit[exId]
+      : [];
+    const incList =
+      bundle.chatsByExhibit && Array.isArray(bundle.chatsByExhibit[exId])
+        ? bundle.chatsByExhibit[exId]
+        : [];
+    const map = new Map();
+
+    for (const c of [...curList, ...incList]) {
+      if (!c || !c.id) continue;
+      if (store.deletedIds[c.id]) continue;
+      const prev = map.get(c.id);
+      if (!prev || (c.ts || 0) >= (prev.ts || 0)) {
+        map.set(c.id, c);
+      }
+    }
+
+    const merged = Array.from(map.values()).sort(
+      (a, b) => (a.ts || 0) - (b.ts || 0)
+    );
+    if (merged.length !== curList.length) changed = true;
+    store.chatsByExhibit[exId] = merged;
+  }
+
+  if (bundle.notesByExhibit && typeof bundle.notesByExhibit === "object") {
+    for (const [exId, noteObj] of Object.entries(bundle.notesByExhibit)) {
+      const cur = store.notesByExhibit[exId];
+      if (!cur || (noteObj && (noteObj.ts || 0) > (cur.ts || 0))) {
+        store.notesByExhibit[exId] = noteObj;
+        changed = true;
+      }
+    }
+  }
+
+  if (bundle.poiOverrides && typeof bundle.poiOverrides === "object") {
+    for (const [poiId, poiObj] of Object.entries(bundle.poiOverrides)) {
+      const cur = store.poiOverrides[poiId];
+      if (!cur || (poiObj && (poiObj.ts || 0) > (cur.ts || 0))) {
+        store.poiOverrides[poiId] = poiObj;
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
 }
 
 function pruneStaleEphemeral(store, now) {
   let pruned = false;
-  // Prune cursors older than 14s
   if (store.cursorsByExhibit) {
-    for (const [exId, cMap] of Object.entries(store.cursorsByExhibit)) {
+    for (const [, cMap] of Object.entries(store.cursorsByExhibit)) {
       if (!cMap || typeof cMap !== "object") continue;
       for (const [u, cObj] of Object.entries(cMap)) {
         if (!cObj || now - (cObj.ts || 0) > 14000) {
@@ -39,7 +197,6 @@ function pruneStaleEphemeral(store, now) {
       }
     }
   }
-  // Prune presence older than 20s
   if (store.presenceByUser) {
     for (const [u, pObj] of Object.entries(store.presenceByUser)) {
       if (!pObj || now - (pObj.ts || 0) > 20000) {
@@ -64,6 +221,9 @@ module.exports = async function handler(req, res) {
   }
 
   const store = globalThis.__MUNIR_SHARED_STATE__;
+  if (!store.deletedIds) store.deletedIds = {};
+  if (!store.clearedAtByExhibit) store.clearedAtByExhibit = {};
+
   const now = Date.now();
   pruneStaleEphemeral(store, now);
 
@@ -85,6 +245,8 @@ module.exports = async function handler(req, res) {
         marksByExhibit: store.marksByExhibit,
         notesByExhibit: store.notesByExhibit,
         poiOverrides: store.poiOverrides,
+        deletedIds: store.deletedIds,
+        clearedAtByExhibit: store.clearedAtByExhibit,
         cursorsByExhibit: store.cursorsByExhibit,
         presenceByUser: store.presenceByUser,
         auditLog: store.auditLog
@@ -112,6 +274,14 @@ module.exports = async function handler(req, res) {
       customAvatarUrl
     } = payload;
 
+    let persistNeeded = false;
+
+    if (payload.syncBundle && typeof payload.syncBundle === "object") {
+      if (mergeSyncBundleIntoStore(store, payload.syncBundle)) {
+        persistNeeded = true;
+      }
+    }
+
     if (action === "presence_ping" && userId) {
       store.presenceByUser[userId] = {
         userId,
@@ -124,8 +294,10 @@ module.exports = async function handler(req, res) {
       };
     } else if (action === "presence_leave" && userId) {
       delete store.presenceByUser[userId];
+    } else if (action === "sync_bundle") {
+      persistNeeded = true;
     } else if (action === "log_event") {
-      store.auditLog.unshift({
+      const entry = payload.auditEntry || {
         id: uid(now),
         type: payload.eventType || "entry",
         userId,
@@ -135,22 +307,28 @@ module.exports = async function handler(req, res) {
         exhibitId: exhibitId || null,
         detail: payload.detail || "Activity recorded",
         ts: now
-      });
-    } else if (action === "chat_message" && exhibitId && payload.text) {
+      };
+      if (!store.auditLog.some((e) => e && e.id === entry.id)) {
+        store.auditLog.unshift(entry);
+      }
+      persistNeeded = true;
+    } else if (action === "chat_message" && exhibitId && (payload.text || payload.chatMsg)) {
       if (!store.chatsByExhibit[exhibitId]) {
         store.chatsByExhibit[exhibitId] = [];
       }
-      const msg = {
+      const msg = payload.chatMsg || {
         id: uid(now),
         userId,
         userName,
         avatarId,
         customAvatarUrl,
-        text: String(payload.text).trim().slice(0, 400),
+        text: String(payload.text || "").trim().slice(0, 400),
         ts: now
       };
-      store.chatsByExhibit[exhibitId].push(msg);
-      store.auditLog.unshift({
+      if (!store.deletedIds[msg.id] && !store.chatsByExhibit[exhibitId].some((c) => c && c.id === msg.id)) {
+        store.chatsByExhibit[exhibitId].push(msg);
+      }
+      const auditEntry = payload.auditEntry || {
         id: uid(now),
         type: "chat",
         userId,
@@ -158,29 +336,27 @@ module.exports = async function handler(req, res) {
         avatarId,
         customAvatarUrl,
         exhibitId,
-        detail: `Commented on ${exhibitId}: "${msg.text.slice(0, 70)}"`,
+        detail: `Commented on ${exhibitId}: "${String(msg.text || "").slice(0, 70)}"`,
         ts: now
-      });
+      };
+      if (!store.auditLog.some((e) => e && e.id === auditEntry.id)) {
+        store.auditLog.unshift(auditEntry);
+      }
+      persistNeeded = true;
     } else if (
       action === "delete_chat_message" &&
       exhibitId &&
       payload.messageId
     ) {
+      store.deletedIds[payload.messageId] = Number(payload.deletedTs) || now;
       const list = store.chatsByExhibit[exhibitId] || [];
       store.chatsByExhibit[exhibitId] = list.filter(
-        (m) => m.id !== payload.messageId
+        (m) => m && m.id !== payload.messageId
       );
-      store.auditLog.unshift({
-        id: uid(now),
-        type: "chat",
-        userId,
-        userName,
-        avatarId,
-        customAvatarUrl,
-        exhibitId,
-        detail: `Deleted own chat message on ${exhibitId}`,
-        ts: now
-      });
+      if (payload.auditEntry && !store.auditLog.some((e) => e && e.id === payload.auditEntry.id)) {
+        store.auditLog.unshift(payload.auditEntry);
+      }
+      persistNeeded = true;
     } else if (action === "add_mark" && exhibitId && payload.mark) {
       if (!store.marksByExhibit[exhibitId]) {
         store.marksByExhibit[exhibitId] = [];
@@ -191,8 +367,10 @@ module.exports = async function handler(req, res) {
           : payload.mark.type === "highlight"
           ? "highlight"
           : "redact";
+      const markId = payload.mark.id || uid(now);
+      const markTs = Number(payload.mark.ts) || now;
       const newMark = {
-        id: uid(now),
+        id: markId,
         type: markType,
         x: payload.mark.x,
         y: payload.mark.y,
@@ -208,10 +386,24 @@ module.exports = async function handler(req, res) {
         userName,
         avatarId,
         customAvatarUrl,
-        ts: now
+        ts: markTs,
+        updatedTs: Number(payload.mark.updatedTs) || markTs
       };
-      store.marksByExhibit[exhibitId].push(newMark);
-      store.auditLog.unshift({
+      if (
+        !store.deletedIds[markId] &&
+        !store.marksByExhibit[exhibitId].some((m) => m && m.id === markId)
+      ) {
+        store.marksByExhibit[exhibitId].push(newMark);
+      }
+      // Clear active live stroke points on user's cursor now that the stroke is committed
+      if (
+        userId &&
+        store.cursorsByExhibit[exhibitId] &&
+        store.cursorsByExhibit[exhibitId][userId]
+      ) {
+        store.cursorsByExhibit[exhibitId][userId].activePoints = null;
+      }
+      const auditEntry = payload.auditEntry || {
         id: uid(now),
         type: "edit",
         userId,
@@ -226,7 +418,11 @@ module.exports = async function handler(req, res) {
               } on ${exhibitId}`
             : `Added forensic ${markType.toUpperCase()} box on ${exhibitId}`,
         ts: now
-      });
+      };
+      if (!store.auditLog.some((e) => e && e.id === auditEntry.id)) {
+        store.auditLog.unshift(auditEntry);
+      }
+      persistNeeded = true;
     } else if (action === "cursor_update" && exhibitId && userId) {
       if (!store.cursorsByExhibit[exhibitId]) {
         store.cursorsByExhibit[exhibitId] = {};
@@ -256,7 +452,7 @@ module.exports = async function handler(req, res) {
       payload.patch
     ) {
       const list = store.marksByExhibit[exhibitId] || [];
-      const target = list.find((m) => m.id === payload.markId);
+      const target = list.find((m) => m && m.id === payload.markId);
       if (target) {
         if (typeof payload.patch.x === "number") target.x = payload.patch.x;
         if (typeof payload.patch.y === "number") target.y = payload.patch.y;
@@ -264,73 +460,54 @@ module.exports = async function handler(req, res) {
         if (typeof payload.patch.h === "number") target.h = payload.patch.h;
         if (payload.patch.color) target.color = payload.patch.color;
         if (payload.patch.label !== undefined) target.label = payload.patch.label;
-        target.ts = now;
+        target.updatedTs = Number(payload.updatedTs) || now;
       }
+      persistNeeded = true;
     } else if (action === "delete_mark" && exhibitId && payload.markId) {
+      store.deletedIds[payload.markId] = Number(payload.deletedTs) || now;
       const list = store.marksByExhibit[exhibitId] || [];
       store.marksByExhibit[exhibitId] = list.filter(
-        (m) => m.id !== payload.markId
+        (m) => m && m.id !== payload.markId
       );
-      store.auditLog.unshift({
-        id: uid(now),
-        type: "edit",
-        userId,
-        userName,
-        avatarId,
-        customAvatarUrl,
-        exhibitId,
-        detail: `Removed a forensic mark on ${exhibitId}`,
-        ts: now
-      });
+      if (payload.auditEntry && !store.auditLog.some((e) => e && e.id === payload.auditEntry.id)) {
+        store.auditLog.unshift(payload.auditEntry);
+      }
+      persistNeeded = true;
     } else if (action === "clear_marks" && exhibitId) {
-      store.marksByExhibit[exhibitId] = [];
-      store.auditLog.unshift({
-        id: uid(now),
-        type: "edit",
-        userId,
-        userName,
-        avatarId,
-        customAvatarUrl,
-        exhibitId,
-        detail: `Cleared forensic marks on ${exhibitId}`,
-        ts: now
+      const clrTs = Number(payload.clearedTs) || now;
+      const existing = store.marksByExhibit[exhibitId] || [];
+      existing.forEach((m) => {
+        if (m && m.id) store.deletedIds[m.id] = clrTs;
       });
+      store.clearedAtByExhibit[exhibitId] = Math.max(
+        store.clearedAtByExhibit[exhibitId] || 0,
+        clrTs
+      );
+      store.marksByExhibit[exhibitId] = [];
+      if (payload.auditEntry && !store.auditLog.some((e) => e && e.id === payload.auditEntry.id)) {
+        store.auditLog.unshift(payload.auditEntry);
+      }
+      persistNeeded = true;
     } else if (action === "save_note" && exhibitId) {
       store.notesByExhibit[exhibitId] = {
         text: String(payload.noteText || "").slice(0, 1200),
         updatedBy: userName,
         ts: now
       };
-      store.auditLog.unshift({
-        id: uid(now),
-        type: "edit",
-        userId,
-        userName,
-        avatarId,
-        customAvatarUrl,
-        exhibitId,
-        detail: `Updated shared investigator sticky note on ${exhibitId}`,
-        ts: now
-      });
+      if (payload.auditEntry && !store.auditLog.some((e) => e && e.id === payload.auditEntry.id)) {
+        store.auditLog.unshift(payload.auditEntry);
+      }
+      persistNeeded = true;
     } else if (action === "update_poi" && payload.poiId && payload.poiData) {
       store.poiOverrides[payload.poiId] = {
         ...payload.poiData,
         updatedBy: userName,
         ts: now
       };
-      store.auditLog.unshift({
-        id: uid(now),
-        type: "identity",
-        userId,
-        userName,
-        avatarId,
-        customAvatarUrl,
-        exhibitId: null,
-        detail: `Updated Person of Interest dossier for ${
-          payload.poiData.realName || payload.poiId
-        }`,
-        ts: now
-      });
+      if (payload.auditEntry && !store.auditLog.some((e) => e && e.id === payload.auditEntry.id)) {
+        store.auditLog.unshift(payload.auditEntry);
+      }
+      persistNeeded = true;
     }
 
     if (userId && action !== "presence_leave") {
@@ -359,6 +536,10 @@ module.exports = async function handler(req, res) {
 
     store.version += 1;
 
+    if (persistNeeded) {
+      saveTmpStore(store);
+    }
+
     const isEphemeral =
       action === "presence_ping" ||
       action === "presence_leave" ||
@@ -381,6 +562,8 @@ module.exports = async function handler(req, res) {
         marksByExhibit: store.marksByExhibit,
         notesByExhibit: store.notesByExhibit,
         poiOverrides: store.poiOverrides,
+        deletedIds: store.deletedIds,
+        clearedAtByExhibit: store.clearedAtByExhibit,
         cursorsByExhibit: store.cursorsByExhibit,
         presenceByUser: store.presenceByUser,
         auditLog: store.auditLog

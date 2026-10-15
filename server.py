@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 THE MUNIR FILES — Ultra-Fast Local Multi-User Server (Static + /api/state + /api/stream SSE)
-Provides 0ms Server-Sent Events (SSE) push + versioned /api/state synchronization.
+Provides 0ms Server-Sent Events (SSE) push + CRDT Union-Merge / Tombstone synchronization.
 """
 
 import json
@@ -24,6 +24,8 @@ SHARED_STATE = {
     "marksByExhibit": {},
     "notesByExhibit": {},
     "poiOverrides": {},
+    "deletedIds": {},
+    "clearedAtByExhibit": {},
     "cursorsByExhibit": {},
     "presenceByUser": {},
     "auditLog": [],
@@ -36,7 +38,15 @@ def load_persisted_state():
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
-                    for k in ("chatsByExhibit", "marksByExhibit", "notesByExhibit", "poiOverrides", "auditLog"):
+                    for k in (
+                        "chatsByExhibit",
+                        "marksByExhibit",
+                        "notesByExhibit",
+                        "poiOverrides",
+                        "deletedIds",
+                        "clearedAtByExhibit",
+                        "auditLog",
+                    ):
                         if k in data:
                             SHARED_STATE[k] = data[k]
                     SHARED_STATE["version"] = int(data.get("version", 1)) + 1
@@ -52,6 +62,8 @@ def save_persisted_state():
             "marksByExhibit": SHARED_STATE["marksByExhibit"],
             "notesByExhibit": SHARED_STATE["notesByExhibit"],
             "poiOverrides": SHARED_STATE["poiOverrides"],
+            "deletedIds": SHARED_STATE["deletedIds"],
+            "clearedAtByExhibit": SHARED_STATE["clearedAtByExhibit"],
             "auditLog": SHARED_STATE["auditLog"][:350],
         }
         with open(STATE_FILE, "w", encoding="utf-8") as f:
@@ -62,6 +74,85 @@ def save_persisted_state():
 
 def make_uid(now_ms):
     return f"{now_ms:x}-{int(time.perf_counter() * 100000) % 100000:x}"
+
+
+def merge_sync_bundle(bundle):
+    if not isinstance(bundle, dict):
+        return False
+    changed = False
+
+    del_ids = bundle.get("deletedIds")
+    if isinstance(del_ids, dict):
+        for did, dts in del_ids.items():
+            ts_val = int(dts) if isinstance(dts, (int, float)) else 1
+            if ts_val > SHARED_STATE["deletedIds"].get(did, 0):
+                SHARED_STATE["deletedIds"][did] = ts_val
+                changed = True
+
+    clr_map = bundle.get("clearedAtByExhibit")
+    if isinstance(clr_map, dict):
+        for ex_id, cts in clr_map.items():
+            ts_val = int(cts) if isinstance(cts, (int, float)) else 0
+            if ts_val > SHARED_STATE["clearedAtByExhibit"].get(ex_id, 0):
+                SHARED_STATE["clearedAtByExhibit"][ex_id] = ts_val
+                changed = True
+
+    inc_marks = bundle.get("marksByExhibit")
+    if isinstance(inc_marks, dict):
+        all_ex = set(SHARED_STATE["marksByExhibit"].keys()) | set(inc_marks.keys())
+        for ex_id in all_ex:
+            cur_list = SHARED_STATE["marksByExhibit"].get(ex_id, [])
+            in_list = inc_marks.get(ex_id, [])
+            if not isinstance(cur_list, list):
+                cur_list = []
+            if not isinstance(in_list, list):
+                in_list = []
+            cleared_at = SHARED_STATE["clearedAtByExhibit"].get(ex_id, 0)
+            merged_map = {}
+            for m in cur_list + in_list:
+                if not isinstance(m, dict) or not m.get("id"):
+                    continue
+                mid = m["id"]
+                if mid in SHARED_STATE["deletedIds"]:
+                    continue
+                if cleared_at > 0 and int(m.get("ts", 0)) <= cleared_at:
+                    continue
+                prev = merged_map.get(mid)
+                m_ver = int(m.get("updatedTs") or m.get("ts") or 0)
+                prev_ver = int(prev.get("updatedTs") or prev.get("ts") or 0) if prev else -1
+                if prev is None or m_ver >= prev_ver:
+                    merged_map[mid] = m
+            merged_list = sorted(merged_map.values(), key=lambda x: int(x.get("ts", 0)))
+            if len(merged_list) != len(cur_list):
+                changed = True
+            SHARED_STATE["marksByExhibit"][ex_id] = merged_list
+
+    inc_chats = bundle.get("chatsByExhibit")
+    if isinstance(inc_chats, dict):
+        all_ex = set(SHARED_STATE["chatsByExhibit"].keys()) | set(inc_chats.keys())
+        for ex_id in all_ex:
+            cur_list = SHARED_STATE["chatsByExhibit"].get(ex_id, [])
+            in_list = inc_chats.get(ex_id, [])
+            if not isinstance(cur_list, list):
+                cur_list = []
+            if not isinstance(in_list, list):
+                in_list = []
+            merged_map = {}
+            for c in cur_list + in_list:
+                if not isinstance(c, dict) or not c.get("id"):
+                    continue
+                cid = c["id"]
+                if cid in SHARED_STATE["deletedIds"]:
+                    continue
+                prev = merged_map.get(cid)
+                if prev is None or int(c.get("ts", 0)) >= int(prev.get("ts", 0)):
+                    merged_map[cid] = c
+            merged_list = sorted(merged_map.values(), key=lambda x: int(x.get("ts", 0)))
+            if len(merged_list) != len(cur_list):
+                changed = True
+            SHARED_STATE["chatsByExhibit"][ex_id] = merged_list
+
+    return changed
 
 
 def prune_stale_ephemeral(now_ms):
@@ -222,6 +313,10 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
         with STATE_LOCK:
             prune_stale_ephemeral(now_ms)
 
+            if isinstance(payload.get("syncBundle"), dict):
+                if merge_sync_bundle(payload["syncBundle"]):
+                    persist_needed = True
+
             if action == "presence_ping" and user_id:
                 SHARED_STATE["presenceByUser"][user_id] = {
                     "userId": user_id,
@@ -234,8 +329,10 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                 }
             elif action == "presence_leave" and user_id:
                 SHARED_STATE["presenceByUser"].pop(user_id, None)
+            elif action == "sync_bundle":
+                persist_needed = True
             elif action == "log_event":
-                SHARED_STATE["auditLog"].insert(0, {
+                entry = payload.get("auditEntry") or {
                     "id": make_uid(now_ms),
                     "type": payload.get("eventType") or "entry",
                     "userId": user_id,
@@ -245,12 +342,14 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                     "exhibitId": exhibit_id,
                     "detail": payload.get("detail") or "Activity recorded",
                     "ts": now_ms,
-                })
+                }
+                if not any(e.get("id") == entry.get("id") for e in SHARED_STATE["auditLog"]):
+                    SHARED_STATE["auditLog"].insert(0, entry)
                 persist_needed = True
-            elif action == "chat_message" and exhibit_id and payload.get("text"):
+            elif action == "chat_message" and exhibit_id and (payload.get("text") or payload.get("chatMsg")):
                 lst = SHARED_STATE["chatsByExhibit"].setdefault(exhibit_id, [])
-                text = str(payload.get("text")).strip()[:400]
-                msg = {
+                text = str(payload.get("text") or "").strip()[:400]
+                msg = payload.get("chatMsg") or {
                     "id": make_uid(now_ms),
                     "userId": user_id,
                     "userName": user_name,
@@ -259,8 +358,11 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                     "text": text,
                     "ts": now_ms,
                 }
-                lst.append(msg)
-                SHARED_STATE["auditLog"].insert(0, {
+                if msg.get("id") not in SHARED_STATE["deletedIds"] and not any(
+                    c.get("id") == msg.get("id") for c in lst
+                ):
+                    lst.append(msg)
+                audit_entry = payload.get("auditEntry") or {
                     "id": make_uid(now_ms),
                     "type": "chat",
                     "userId": user_id,
@@ -268,21 +370,27 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                     "avatarId": avatar_id,
                     "customAvatarUrl": custom_avatar_url,
                     "exhibitId": exhibit_id,
-                    "detail": f'Commented on {exhibit_id}: "{text[:70]}"',
+                    "detail": f'Commented on {exhibit_id}: "{str(msg.get("text", ""))[:70]}"',
                     "ts": now_ms,
-                })
+                }
+                if not any(e.get("id") == audit_entry.get("id") for e in SHARED_STATE["auditLog"]):
+                    SHARED_STATE["auditLog"].insert(0, audit_entry)
                 persist_needed = True
             elif action == "delete_chat_message" and exhibit_id and payload.get("messageId"):
+                mid = payload.get("messageId")
+                SHARED_STATE["deletedIds"][mid] = int(payload.get("deletedTs") or now_ms)
                 lst = SHARED_STATE["chatsByExhibit"].get(exhibit_id, [])
                 SHARED_STATE["chatsByExhibit"][exhibit_id] = [
-                    m for m in lst if m.get("id") != payload.get("messageId")
+                    m for m in lst if m.get("id") != mid
                 ]
                 persist_needed = True
             elif action == "add_mark" and exhibit_id and isinstance(payload.get("mark"), dict):
                 mk = payload["mark"]
                 mtype = mk.get("type") if mk.get("type") in ("pencil", "highlight", "redact") else "redact"
+                mid = mk.get("id") or make_uid(now_ms)
+                mts = int(mk.get("ts") or now_ms)
                 new_mark = {
-                    "id": make_uid(now_ms),
+                    "id": mid,
                     "type": mtype,
                     "x": mk.get("x", 0),
                     "y": mk.get("y", 0),
@@ -297,10 +405,16 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                     "userName": user_name,
                     "avatarId": avatar_id,
                     "customAvatarUrl": custom_avatar_url,
-                    "ts": now_ms,
+                    "ts": mts,
+                    "updatedTs": int(mk.get("updatedTs") or mts),
                 }
-                SHARED_STATE["marksByExhibit"].setdefault(exhibit_id, []).append(new_mark)
-                SHARED_STATE["auditLog"].insert(0, {
+                lst = SHARED_STATE["marksByExhibit"].setdefault(exhibit_id, [])
+                if mid not in SHARED_STATE["deletedIds"] and not any(m.get("id") == mid for m in lst):
+                    lst.append(new_mark)
+                if user_id and exhibit_id in SHARED_STATE["cursorsByExhibit"]:
+                    if user_id in SHARED_STATE["cursorsByExhibit"][exhibit_id]:
+                        SHARED_STATE["cursorsByExhibit"][exhibit_id][user_id]["activePoints"] = None
+                audit_entry = payload.get("auditEntry") or {
                     "id": make_uid(now_ms),
                     "type": "edit",
                     "userId": user_id,
@@ -314,7 +428,9 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                         else f"Added forensic {mtype.upper()} box on {exhibit_id}"
                     ),
                     "ts": now_ms,
-                })
+                }
+                if not any(e.get("id") == audit_entry.get("id") for e in SHARED_STATE["auditLog"]):
+                    SHARED_STATE["auditLog"].insert(0, audit_entry)
                 persist_needed = True
             elif action == "cursor_update" and exhibit_id and user_id:
                 SHARED_STATE["cursorsByExhibit"].setdefault(exhibit_id, {})[user_id] = {
@@ -338,16 +454,26 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
                         for k in ("x", "y", "w", "h", "color", "label"):
                             if k in patch:
                                 m[k] = patch[k]
-                        m["ts"] = now_ms
+                        m["updatedTs"] = int(payload.get("updatedTs") or now_ms)
                         break
                 persist_needed = True
             elif action == "delete_mark" and exhibit_id and payload.get("markId"):
+                mid = payload.get("markId")
+                SHARED_STATE["deletedIds"][mid] = int(payload.get("deletedTs") or now_ms)
                 lst = SHARED_STATE["marksByExhibit"].get(exhibit_id, [])
                 SHARED_STATE["marksByExhibit"][exhibit_id] = [
-                    m for m in lst if m.get("id") != payload.get("markId")
+                    m for m in lst if m.get("id") != mid
                 ]
                 persist_needed = True
             elif action == "clear_marks" and exhibit_id:
+                clr_ts = int(payload.get("clearedTs") or now_ms)
+                for m in SHARED_STATE["marksByExhibit"].get(exhibit_id, []):
+                    if m.get("id"):
+                        SHARED_STATE["deletedIds"][m["id"]] = clr_ts
+                SHARED_STATE["clearedAtByExhibit"][exhibit_id] = max(
+                    SHARED_STATE["clearedAtByExhibit"].get(ex_id, 0) if (ex_id := exhibit_id) else 0,
+                    clr_ts,
+                )
                 SHARED_STATE["marksByExhibit"][exhibit_id] = []
                 persist_needed = True
             elif action == "save_note" and exhibit_id:
@@ -409,7 +535,7 @@ class MunirRequestHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+    port = int(sys.argv[1]) if len(sys.argv[1:]) >= 1 else 8080
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     load_persisted_state()
     server = ThreadingHTTPServer(("127.0.0.1", port), MunirRequestHandler)
