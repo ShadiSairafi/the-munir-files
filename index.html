@@ -212,6 +212,12 @@
           <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
         </button>
 
+        <button type="button" class="tool-btn" id="openGlobalChatBtn" title="Open Site-Wide Global Detective Chat">
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Global Chat</span>
+          <span id="globalChatTopBadge" style="background:#2563eb; color:#fff; padding:1px 6px; border-radius:10px; font-size:0.66rem;">0</span>
+        </button>
+
         <button type="button" class="tool-btn" id="openAuditLogBtn" title="View Live Log of User Entries & Forensic Edits">
           <svg class="svg-icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
           <span>Entries &amp; Edits Log</span>
@@ -548,7 +554,7 @@
         </div>
       </div>
 
-      <!-- Right Sidebar: 3 Tabs (1. Forensic Dossier | 2. Page Chat | 3. Entries & Edits Log) -->
+      <!-- Right Sidebar: 4 Tabs (1. Forensic Dossier | 2. Page Chat | 3. Global Chat | 4. Audit Log) -->
       <aside class="lightbox-sidebar" id="lbSidebar" aria-label="Exhibit Forensic Details and Live Chat">
         <div class="sidebar-tabs-bar" role="tablist">
           <button type="button" class="sidebar-tab-btn is-active" data-sidebar-tab="dossier">
@@ -559,6 +565,11 @@
             <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             <span>Page Chat</span>
             <span id="lbChatCountBadge" style="background:var(--stamp-red); color:#fff; padding:0 5px; border-radius:8px; font-size:0.62rem;">0</span>
+          </button>
+          <button type="button" class="sidebar-tab-btn" data-sidebar-tab="global-chat">
+            <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span>Global Chat</span>
+            <span id="lbGlobalChatCountBadge" style="background:#2563eb; color:#fff; padding:0 5px; border-radius:8px; font-size:0.62rem;">0</span>
           </button>
           <button type="button" class="sidebar-tab-btn" data-sidebar-tab="log">
             <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -681,7 +692,63 @@
           </div>
         </div>
 
-        <!-- TAB 3: Live Entries & Edits Log inside Sidebar -->
+        <!-- TAB 3: Site-Wide Global Detective Chat inside Lightbox Sidebar -->
+        <div class="sidebar-tab-panel" id="sidebarPanelGlobalChat">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 class="sidebar-section-title" style="margin:0; border:none; color:#93c5fd;">
+              <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <span id="lbGlobalChatRoomTitle">GLOBAL HQ CHAT (ALL PAGES)</span>
+            </h3>
+            <span style="font-family:var(--font-mono); font-size:0.6rem; color:#93c5fd; border:1px solid rgba(59,130,246,0.4); padding:1px 6px; border-radius:4px;">SITE-WIDE</span>
+          </div>
+
+          <div class="page-chat-feed" id="lbGlobalChatFeed"></div>
+
+          <div class="chat-composer-shell" id="lbGlobalChatComposerShell">
+            <div id="lbGlobalChatReplyBanner" class="chat-reply-banner" hidden></div>
+            <div id="lbGlobalChatMediaPreview" class="chat-media-preview" hidden></div>
+            <div id="lbGlobalGifPickerDrawer" class="chat-gif-drawer" hidden></div>
+            <form class="page-chat-form" id="lbGlobalChatForm" autocomplete="off">
+              <input
+                type="file"
+                id="lbGlobalChatFileInput"
+                accept="image/*,.gif,.webp,.png,.jpg,.jpeg"
+                hidden
+              />
+              <button
+                type="button"
+                class="tool-btn chat-media-btn"
+                id="lbGlobalChatUploadBtn"
+                title="Upload Picture or GIF to Global Chat"
+              >
+                <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </button>
+              <button
+                type="button"
+                class="tool-btn chat-gif-btn"
+                id="lbGlobalChatGifBtn"
+                title="Open GIF Library for Global Chat"
+              >
+                <span>GIF</span>
+              </button>
+              <input
+                type="text"
+                id="lbGlobalChatInput"
+                class="page-chat-input"
+                placeholder="Message Global HQ Chat, paste pic/GIF..."
+                maxlength="400"
+                autocomplete="off"
+                data-form-type="other"
+              />
+              <button type="submit" class="tool-btn is-active">
+                <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span>Send</span>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- TAB 4: Live Entries & Edits Log inside Sidebar -->
         <div class="sidebar-tab-panel" id="sidebarPanelLog">
           <h3 class="sidebar-section-title">
             <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
@@ -894,6 +961,85 @@
       <div class="audit-log-feed" id="globalAuditLogFeed"></div>
     </div>
   </dialog>
+
+  <!-- ========================================================================
+       7. FLOATING SITE-WIDE GLOBAL HQ CHAT DRAWER & LAUNCHER
+       ======================================================================== -->
+  <button
+    type="button"
+    class="global-chat-fab"
+    id="globalChatFabBtn"
+    title="Open Site-Wide Global Detective Chat"
+    aria-label="Open Site-Wide Global Detective Chat"
+  >
+    <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span>GLOBAL CHAT</span>
+    <span class="global-chat-fab-badge" id="globalChatFabBadge">0</span>
+  </button>
+
+  <aside class="global-chat-drawer" id="globalChatDrawer" hidden aria-label="Site-Wide Global Detective Chat">
+    <div class="global-chat-drawer-header">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+        <span class="global-chat-pill">HQ CHANNEL</span>
+        <strong id="globalDrawerTitle" style="font-family:var(--font-mono); font-size:0.78rem; color:#faf5e8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          GLOBAL CASE CHAT (0)
+        </strong>
+      </div>
+      <div style="display:flex; align-items:center; gap:5px;">
+        <button type="button" class="tool-btn" id="globalDrawerEditIdBtn" style="padding:2px 7px; font-size:0.62rem;">
+          <span>Alias/Icon</span>
+        </button>
+        <button type="button" class="tool-btn btn-danger-accent" id="closeGlobalChatDrawerBtn" style="padding:2px 7px; font-size:0.65rem;">
+          <span>×</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="page-chat-feed" id="globalChatFeed"></div>
+
+    <div class="chat-composer-shell" id="globalChatComposerShell">
+      <div id="globalChatReplyBanner" class="chat-reply-banner" hidden></div>
+      <div id="globalChatMediaPreview" class="chat-media-preview" hidden></div>
+      <div id="globalGifPickerDrawer" class="chat-gif-drawer" hidden></div>
+      <form class="page-chat-form" id="globalChatForm" autocomplete="off">
+        <input
+          type="file"
+          id="globalChatFileInput"
+          accept="image/*,.gif,.webp,.png,.jpg,.jpeg"
+          hidden
+        />
+        <button
+          type="button"
+          class="tool-btn chat-media-btn"
+          id="globalChatUploadBtn"
+          title="Upload Picture or GIF (or paste with Ctrl+V)"
+        >
+          <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+        <button
+          type="button"
+          class="tool-btn chat-gif-btn"
+          id="globalChatGifBtn"
+          title="Open Unhinged & Reaction GIF Library"
+        >
+          <span>GIF</span>
+        </button>
+        <input
+          type="text"
+          id="globalChatInput"
+          class="page-chat-input"
+          placeholder="Message Global HQ Chat, paste pic/GIF..."
+          maxlength="400"
+          autocomplete="off"
+          data-form-type="other"
+        />
+        <button type="submit" class="tool-btn is-active">
+          <svg class="svg-icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          <span>Send</span>
+        </button>
+      </form>
+    </div>
+  </aside>
 
   <script src="./icons.js"></script>
   <script src="./data.js"></script>

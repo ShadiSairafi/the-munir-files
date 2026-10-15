@@ -130,11 +130,13 @@
   }
 
   function getSavedSidebarTab() {
+    const isValid = (v) =>
+      v === "dossier" || v === "chat" || v === "global-chat" || v === "log";
     const cVal = getCookieVal(STORAGE_KEYS.SIDEBAR_TAB_COOKIE);
-    if (cVal === "dossier" || cVal === "chat" || cVal === "log") return cVal;
+    if (isValid(cVal)) return cVal;
     try {
       const ls = localStorage.getItem(STORAGE_KEYS.SIDEBAR_TAB_COOKIE);
-      if (ls === "dossier" || ls === "chat" || ls === "log") return ls;
+      if (isValid(ls)) return ls;
     } catch (_e) {}
     return "dossier";
   }
@@ -354,6 +356,7 @@
     replyingToChat: null,
     pendingChatMediaUrl: null,
     gifDrawerOpen: false,
+    globalChatDrawerOpen: false,
     activeGifCategory: "unhinged",
     gifSearchQuery: "",
     gifRemoteResults: null
@@ -766,6 +769,7 @@
     }
 
     playForensicSound("folder_open");
+    coverStage.style.display = "";
     coverStage.classList.remove(
       "is-opened",
       "is-hidden",
@@ -774,6 +778,29 @@
       "is-closing-start",
       "is-closing-swing"
     );
+
+    const isMobileViewport =
+      window.innerWidth <= 860 ||
+      Boolean(window.matchMedia && window.matchMedia("(max-width: 860px)").matches);
+
+    if (isMobileViewport) {
+      coverStage.classList.remove("is-peeling", "is-anticipating");
+      coverStage.classList.add("is-opening");
+      setTimeout(() => {
+        coverStage.classList.add("is-opened", "is-hidden");
+        coverStage.classList.remove(
+          "is-anticipating",
+          "is-opening",
+          "is-dolly-into-pages",
+          "is-peeling"
+        );
+        coverStage.style.display = "none";
+        state.coverOpen = true;
+        state.coverAnimating = false;
+        window.scrollTo({ top: 0, behavior: "instant" });
+      }, 320);
+      return;
+    }
 
     if (wasPeeling) {
       // Smoothly continue directly from the semi-open angle into full swing open!
@@ -803,6 +830,7 @@
         "is-dolly-into-pages",
         "is-peeling"
       );
+      coverStage.style.display = "none";
       state.coverOpen = true;
       state.coverAnimating = false;
     }, finishDelay);
@@ -817,6 +845,7 @@
     resetFolderStraight();
     playForensicSound("folder_close");
 
+    coverStage.style.display = "";
     coverStage.classList.remove(
       "is-opened",
       "is-hidden",
@@ -842,15 +871,7 @@
   }
 
   function triggerWorkspaceCardCascade() {
-    const cards = document.querySelectorAll(
-      ".subject-card, .exhibit-card, .stream-item, .foia-legal-page, .cork-node"
-    );
-    cards.forEach((el, idx) => {
-      el.style.setProperty("--stagger-i", String(Math.min(idx, 18)));
-      el.style.animation = "none";
-      void el.offsetWidth;
-      el.style.animation = "";
-    });
+    // Lightweight no-op: avoids forcing 55 synchronous reflows or GPU layer allocations on mobile WebViews
   }
 
   // ============================================================================
@@ -2067,6 +2088,7 @@
     renderOnlineUsersWidget();
     updateCoverMugshotIfNeeded();
     renderSubjectsGrid();
+    renderGlobalChat();
 
     if (state.lightboxOpen) {
       const ex = EXHIBITS[state.currentExhibitIndex];
@@ -2606,6 +2628,7 @@
                     src="./${encodeURI(ex.filename)}"
                     alt="${escapeHtmlAttr(ex.id)} — ${escapeHtmlAttr(ex.title)}"
                     loading="lazy"
+                    decoding="async"
                   />
                   ${
                     isCritical
@@ -3583,6 +3606,7 @@
 
     updateLightboxPinButton();
     renderLightboxChat(ex);
+    renderGlobalChat();
     renderSharedMarksOverlay(ex);
     renderMultiUserCursorsLayer(ex);
     renderSidebarAuditLog();
@@ -4448,14 +4472,24 @@
 
   function updateChatReplyBanners(activeExhibitId) {
     const r = state.replyingToChat;
-    const banners = [
+    const pageBanners = [
       document.getElementById("lbChatReplyBanner"),
       document.getElementById("binderChatReplyBanner")
     ];
+    const globalBanners = [
+      document.getElementById("globalChatReplyBanner"),
+      document.getElementById("lbGlobalChatReplyBanner")
+    ];
 
-    banners.forEach((banner) => {
+    pageBanners.forEach((banner) => {
       if (!banner) return;
-      if (!r || (activeExhibitId && r.exhibitId !== activeExhibitId)) {
+      if (
+        !r ||
+        r.exhibitId === "GLOBAL" ||
+        (activeExhibitId &&
+          activeExhibitId !== "GLOBAL" &&
+          r.exhibitId !== activeExhibitId)
+      ) {
         banner.hidden = true;
         banner.innerHTML = "";
         return;
@@ -4476,13 +4510,39 @@
           updateChatReplyBanners(activeExhibitId);
         });
     });
+
+    globalBanners.forEach((banner) => {
+      if (!banner) return;
+      if (!r || r.exhibitId !== "GLOBAL") {
+        banner.hidden = true;
+        banner.innerHTML = "";
+        return;
+      }
+      banner.hidden = false;
+      banner.innerHTML = `
+        <div class="chat-reply-banner-info">
+          <span class="chat-reply-banner-tag">↩ Replying to ${escapeHtml(r.userName || "Detective")}</span>
+          <span class="chat-reply-banner-snippet">${escapeHtml(r.text || "📷 [GIF / Photo]")}</span>
+        </div>
+        <button type="button" class="chat-reply-cancel-btn" data-cancel-reply title="Cancel reply">×</button>
+      `;
+      banner
+        .querySelector("[data-cancel-reply]")
+        ?.addEventListener("click", () => {
+          playForensicSound("click");
+          state.replyingToChat = null;
+          updateChatReplyBanners("GLOBAL");
+        });
+    });
   }
 
   function updateChatMediaPreviews() {
     const url = state.pendingChatMediaUrl;
     const previews = [
       document.getElementById("lbChatMediaPreview"),
-      document.getElementById("binderChatMediaPreview")
+      document.getElementById("binderChatMediaPreview"),
+      document.getElementById("globalChatMediaPreview"),
+      document.getElementById("lbGlobalChatMediaPreview")
     ];
 
     previews.forEach((el) => {
@@ -4637,7 +4697,9 @@
   function updateGifDrawersGridOnly() {
     const drawers = [
       document.getElementById("lbGifPickerDrawer"),
-      document.getElementById("binderGifPickerDrawer")
+      document.getElementById("binderGifPickerDrawer"),
+      document.getElementById("globalGifPickerDrawer"),
+      document.getElementById("lbGlobalGifPickerDrawer")
     ];
     const cat = state.activeGifCategory || "unhinged";
     const list = getDisplayedGifList();
@@ -4691,9 +4753,16 @@
         btn.addEventListener("click", () => {
           const gifUrl = btn.getAttribute("data-pick-gif-url");
           if (!gifUrl) return;
-          const exId = getActiveExhibitIdForChat();
+          const isGlobalDrawer =
+            drawer.id === "globalGifPickerDrawer" ||
+            drawer.id === "lbGlobalGifPickerDrawer";
+          const exId = isGlobalDrawer ? "GLOBAL" : getActiveExhibitIdForChat();
           const inputEl =
-            drawer.id === "binderGifPickerDrawer"
+            drawer.id === "globalGifPickerDrawer"
+              ? document.getElementById("globalChatInput")
+              : drawer.id === "lbGlobalGifPickerDrawer"
+              ? document.getElementById("lbGlobalChatInput")
+              : drawer.id === "binderGifPickerDrawer"
               ? document.getElementById("binderChatInput")
               : document.getElementById("lbChatInput");
           const caption = inputEl ? inputEl.value.trim() : "";
@@ -4720,7 +4789,9 @@
   function renderGifPickerDrawers() {
     const drawers = [
       document.getElementById("lbGifPickerDrawer"),
-      document.getElementById("binderGifPickerDrawer")
+      document.getElementById("binderGifPickerDrawer"),
+      document.getElementById("globalGifPickerDrawer"),
+      document.getElementById("lbGlobalGifPickerDrawer")
     ];
 
     drawers.forEach((drawer) => {
@@ -4826,7 +4897,10 @@
         const sendCustomUrl = () => {
           const val = (customUrlInput?.value || "").trim();
           if (!val) return;
-          const exId = getActiveExhibitIdForChat();
+          const isGlobalDrawer =
+            drawer.id === "globalGifPickerDrawer" ||
+            drawer.id === "lbGlobalGifPickerDrawer";
+          const exId = isGlobalDrawer ? "GLOBAL" : getActiveExhibitIdForChat();
           customUrlInput.value = "";
           state.gifDrawerOpen = false;
           renderGifPickerDrawers();
@@ -4938,8 +5012,12 @@
         state.replyingToChat = { id, userName, text, exhibitId };
         updateChatReplyBanners(exhibitId);
         const targetInput =
-          container.id === "binderChatFeed" ||
-          container.closest("#binderPageRight")
+          container.id === "globalChatFeed"
+            ? document.getElementById("globalChatInput")
+            : container.id === "lbGlobalChatFeed"
+            ? document.getElementById("lbGlobalChatInput")
+            : container.id === "binderChatFeed" ||
+              container.closest("#binderPageRight")
             ? document.getElementById("binderChatInput")
             : document.getElementById("lbChatInput");
         targetInput?.focus();
@@ -4987,6 +5065,7 @@
     if (
       state.replyingToChat &&
       state.replyingToChat.exhibitId &&
+      state.replyingToChat.exhibitId !== "GLOBAL" &&
       state.replyingToChat.exhibitId !== ex.id
     ) {
       state.replyingToChat = null;
@@ -5009,6 +5088,79 @@
         bindChatDeleteButtons(feedEl);
         feedEl.scrollTop = feedEl.scrollHeight;
       }
+    }
+  }
+
+  function renderGlobalChat() {
+    const chats = state.shared.chatsByExhibit["GLOBAL"] || [];
+    const countStr = String(chats.length);
+
+    const topBadge = document.getElementById("globalChatTopBadge");
+    const fabBadge = document.getElementById("globalChatFabBadge");
+    const lbBadge = document.getElementById("lbGlobalChatCountBadge");
+    const drawerTitle = document.getElementById("globalDrawerTitle");
+    const lbTitle = document.getElementById("lbGlobalChatRoomTitle");
+
+    if (topBadge && topBadge.textContent !== countStr)
+      topBadge.textContent = countStr;
+    if (fabBadge && fabBadge.textContent !== countStr)
+      fabBadge.textContent = countStr;
+    if (lbBadge && lbBadge.textContent !== countStr)
+      lbBadge.textContent = countStr;
+    if (drawerTitle)
+      drawerTitle.textContent = `GLOBAL HQ CHAT (${chats.length})`;
+    if (lbTitle)
+      lbTitle.textContent = `GLOBAL HQ CHAT — SITE-WIDE (${chats.length})`;
+
+    updateChatReplyBanners();
+    updateChatMediaPreviews();
+
+    const chatSig = `GLOBAL:${chats.length}:${chats[chats.length - 1]?.id || ""}:${state.userProfile?.id || ""}:${state.userProfile?.name || ""}`;
+    const feeds = [
+      document.getElementById("globalChatFeed"),
+      document.getElementById("lbGlobalChatFeed")
+    ];
+
+    feeds.forEach((feedEl) => {
+      if (!feedEl) return;
+      if (feedEl.dataset.lastSig !== chatSig) {
+        feedEl.dataset.lastSig = chatSig;
+        feedEl.innerHTML = renderChatMessagesHtml(chats, "GLOBAL");
+        bindChatDeleteButtons(feedEl);
+        feedEl.scrollTop = feedEl.scrollHeight;
+      }
+    });
+  }
+
+  function toggleGlobalChatDrawer(forceState) {
+    const nextOpen =
+      typeof forceState === "boolean"
+        ? forceState
+        : !state.globalChatDrawerOpen;
+    state.globalChatDrawerOpen = nextOpen;
+
+    const drawer = document.getElementById("globalChatDrawer");
+    const fabBtn = document.getElementById("globalChatFabBtn");
+    const topBtn = document.getElementById("openGlobalChatBtn");
+
+    if (drawer) {
+      drawer.classList.toggle("is-open", nextOpen);
+      drawer.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    }
+    if (fabBtn) {
+      fabBtn.classList.toggle("is-active", nextOpen);
+    }
+    if (topBtn) {
+      topBtn.classList.toggle("is-active", nextOpen);
+    }
+
+    if (nextOpen) {
+      renderGlobalChat();
+      const feedEl = document.getElementById("globalChatFeed");
+      if (feedEl) feedEl.scrollTop = feedEl.scrollHeight;
+      setTimeout(() => {
+        document.getElementById("globalChatInput")?.focus();
+      }, 80);
     }
   }
 
@@ -5055,7 +5207,9 @@
 
   function switchSidebarTab(tabId, persistToCookie = true) {
     const validTab =
-      tabId === "chat" || tabId === "log" ? tabId : "dossier";
+      tabId === "chat" || tabId === "global-chat" || tabId === "log"
+        ? tabId
+        : "dossier";
     state.activeSidebarTab = validTab;
     if (persistToCookie) {
       saveSidebarTabCookie(validTab);
@@ -5075,8 +5229,15 @@
       .getElementById("sidebarPanelChat")
       ?.classList.toggle("is-active", validTab === "chat");
     document
+      .getElementById("sidebarPanelGlobalChat")
+      ?.classList.toggle("is-active", validTab === "global-chat");
+    document
       .getElementById("sidebarPanelLog")
       ?.classList.toggle("is-active", validTab === "log");
+
+    if (validTab === "global-chat") {
+      renderGlobalChat();
+    }
   }
 
   // ============================================================================
@@ -5097,6 +5258,8 @@
             ? "FORENSIC EDIT"
             : item.type === "identity"
             ? "PROFILE EDIT"
+            : item.exhibitId === "GLOBAL"
+            ? "GLOBAL CHAT"
             : "PAGE CHAT";
 
         return `
@@ -5110,7 +5273,11 @@
               <div style="color:#dfd7c8; line-height:1.4;">
                 ${escapeHtml(item.detail)}
                 ${
-                  item.exhibitId
+                  item.exhibitId === "GLOBAL"
+                    ? `<button type="button" class="tool-btn" data-jump-global-chat style="padding:1px 6px; font-size:0.64rem; margin-left:6px; display:inline-flex;">
+                        Open Global Chat
+                      </button>`
+                    : item.exhibitId
                     ? `<button type="button" class="tool-btn" data-jump-exhibit="${escapeHtmlAttr(item.exhibitId)}" style="padding:1px 6px; font-size:0.64rem; margin-left:6px; display:inline-flex;">
                         Inspect ${escapeHtml(item.exhibitId)}
                       </button>`
@@ -5134,6 +5301,18 @@
           const auditModal = document.getElementById("auditLogModal");
           if (auditModal && auditModal.open) auditModal.close();
           openLightbox(idx, "saved");
+        }
+      });
+    });
+    container.querySelectorAll("[data-jump-global-chat]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        playForensicSound("click");
+        const auditModal = document.getElementById("auditLogModal");
+        if (auditModal && auditModal.open) auditModal.close();
+        if (state.lightboxOpen) {
+          switchSidebarTab("global-chat", true);
+        } else {
+          toggleGlobalChatDrawer(true);
         }
       });
     });
@@ -5321,12 +5500,17 @@
       if (state.coverOpen || state.coverAnimating) return;
       if (e.button !== undefined && e.button !== 0) return;
       if (e.target.closest(".redacted-bar")) return;
-      coverPointerDown = true;
-      coverPressStartedOnOpenBtn = Boolean(
+      const isDirectOpenTrigger = Boolean(
         fromOpenButton ||
           e.target.closest("#openDossierBtn") ||
           e.target.closest("#folderBrassClasp")
       );
+      // On touch screens (phones/Instagram WebView), touching the folder body to scroll should NOT open the cover
+      if (!isDirectOpenTrigger && e.pointerType === "touch") {
+        return;
+      }
+      coverPointerDown = true;
+      coverPressStartedOnOpenBtn = isDirectOpenTrigger;
       if (state.peelHoldTimer) clearTimeout(state.peelHoldTimer);
       const startX = e.clientX;
       state.peelHoldTimer = setTimeout(() => {
@@ -5447,13 +5631,38 @@
       });
     }
 
-    // 3. Top Command Bar Buttons
+    // 3. Top Command Bar Buttons & Global Chat Drawer
     document
       .getElementById("userIdentityPill")
       ?.addEventListener("click", openIdentityModal);
     document
       .getElementById("lbEditIdentityFromChatBtn")
       ?.addEventListener("click", openIdentityModal);
+    document
+      .getElementById("lbEditIdentityFromGlobalChatBtn")
+      ?.addEventListener("click", openIdentityModal);
+    document
+      .getElementById("globalDrawerEditIdBtn")
+      ?.addEventListener("click", openIdentityModal);
+
+    document
+      .getElementById("openGlobalChatBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        toggleGlobalChatDrawer();
+      });
+    document
+      .getElementById("globalChatFabBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        toggleGlobalChatDrawer();
+      });
+    document
+      .getElementById("closeGlobalChatDrawerBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        toggleGlobalChatDrawer(false);
+      });
 
     document.getElementById("openAuditLogBtn")?.addEventListener("click", () => {
       playForensicSound("click");
@@ -6070,6 +6279,109 @@
       if (input) input.value = "";
     });
 
+    // Global Chat Forms (Floating Drawer + Lightbox Sidebar Tab)
+    document
+      .getElementById("globalChatUploadBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        document.getElementById("globalChatFileInput")?.click();
+      });
+
+    document
+      .getElementById("globalChatFileInput")
+      ?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (file) processChatImageOrGifFile(file);
+        e.target.value = "";
+      });
+
+    document
+      .getElementById("globalChatGifBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        state.gifDrawerOpen = !state.gifDrawerOpen;
+        renderGifPickerDrawers();
+      });
+
+    document
+      .getElementById("globalChatInput")
+      ?.addEventListener("paste", (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              processChatImageOrGifFile(file);
+              break;
+            }
+          }
+        }
+      });
+
+    document
+      .getElementById("globalChatForm")
+      ?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const input = document.getElementById("globalChatInput");
+        const val = input ? input.value.trim() : "";
+        if (!val && !state.pendingChatMediaUrl) return;
+        submitPageChatMessage("GLOBAL", val);
+        if (input) input.value = "";
+      });
+
+    document
+      .getElementById("lbGlobalChatUploadBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        document.getElementById("lbGlobalChatFileInput")?.click();
+      });
+
+    document
+      .getElementById("lbGlobalChatFileInput")
+      ?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (file) processChatImageOrGifFile(file);
+        e.target.value = "";
+      });
+
+    document
+      .getElementById("lbGlobalChatGifBtn")
+      ?.addEventListener("click", () => {
+        playForensicSound("click");
+        state.gifDrawerOpen = !state.gifDrawerOpen;
+        renderGifPickerDrawers();
+      });
+
+    document
+      .getElementById("lbGlobalChatInput")
+      ?.addEventListener("paste", (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              processChatImageOrGifFile(file);
+              break;
+            }
+          }
+        }
+      });
+
+    document
+      .getElementById("lbGlobalChatForm")
+      ?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const input = document.getElementById("lbGlobalChatInput");
+        const val = input ? input.value.trim() : "";
+        if (!val && !state.pendingChatMediaUrl) return;
+        submitPageChatMessage("GLOBAL", val);
+        if (input) input.value = "";
+      });
+
     bindViewportInteractions();
 
     // Keyboard Shortcuts
@@ -6621,6 +6933,7 @@
     renderFilterBanner();
     renderExhibitsView();
     renderOnlineUsersWidget();
+    renderGlobalChat();
 
     if (broadcastChannel) {
       broadcastChannel.onmessage = (ev) => {

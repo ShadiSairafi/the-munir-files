@@ -257,6 +257,38 @@ html:active-view-transition-type(backward)::view-transition-new(root) {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  display: none !important;
+}
+
+@media (max-width: 860px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  .dossier-cover-stage {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    align-items: flex-start;
+    padding: 2.2rem 0.75rem 3rem;
+    backdrop-filter: none;
+    perspective: none;
+  }
+
+  .dossier-cover-stage .manila-folder-wrapper,
+  .dossier-cover-stage .manila-folder-flap {
+    transform-style: flat;
+  }
+
+  .dossier-cover-stage.is-opening .manila-folder-wrapper,
+  .dossier-cover-stage.is-dolly-into-pages .manila-folder-wrapper {
+    transform: translateY(-10px) scale(0.98) !important;
+  }
+
+  .dossier-cover-stage.is-opening .manila-folder-flap,
+  .dossier-cover-stage.is-dolly-into-pages .manila-folder-flap {
+    transform: none !important;
+    opacity: 0;
+  }
 }
 
 .manila-folder-wrapper {
@@ -1408,6 +1440,8 @@ body.redactions-off .redacted-bar {
   position: relative;
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s;
   overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 420px;
 }
 
 .exhibit-card:hover {
@@ -2404,19 +2438,7 @@ body.redactions-off .redacted-bar {
    9. FORENSIC LIGHTBOX DIALOG & DETECTIVE PAGE-TO-PAGE INSPECTION TRANSITIONS
    ============================================================================ */
 
-dialog.forensic-dialog[open]:where(:not([data-closing])) {
-  opacity: 1;
-  transform: scale(1);
-
-  @starting-style {
-    opacity: 0;
-    transform: scale(0.94);
-  }
-}
-
 dialog.forensic-dialog {
-  opacity: 0;
-  transform: scale(0.94);
   width: min(1480px, 97vw);
   height: min(94vh, 940px);
   max-width: 97vw;
@@ -2429,35 +2451,18 @@ dialog.forensic-dialog {
   border-radius: 8px;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.94);
   overflow: hidden;
-
-  transition-property: opacity, transform, display, overlay;
-  transition-duration: 0.26s;
-  transition-timing-function: ease-out;
-  transition-behavior: allow-discrete;
 }
 
 dialog.forensic-dialog[open] {
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  transform: scale(1);
 }
 
 dialog.forensic-dialog::backdrop {
-  background-color: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0px);
-  transition-property: background-color, backdrop-filter, display, overlay;
-  transition-duration: 0.26s;
-  transition-timing-function: ease-out;
-  transition-behavior: allow-discrete;
-}
-
-dialog.forensic-dialog[open]:where(:not([data-closing]))::backdrop {
   background-color: rgba(5, 4, 3, 0.88);
   backdrop-filter: blur(6px);
-
-  @starting-style {
-    background-color: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
-  }
 }
 
 /* Sleek Single-Row Lightbox Instrument Header */
@@ -4426,18 +4431,7 @@ mark.search-highlight {
 }
 
 /* Modals for Identity Customizer & Global Audit Log */
-dialog.compact-modal[open]:where(:not([data-closing])) {
-  opacity: 1;
-  transform: scale(1);
-  @starting-style {
-    opacity: 0;
-    transform: scale(0.94);
-  }
-}
-
 dialog.compact-modal {
-  opacity: 0;
-  transform: scale(0.94);
   width: min(640px, 94vw);
   max-height: 88vh;
   margin: auto;
@@ -4448,15 +4442,13 @@ dialog.compact-modal {
   border-radius: 8px;
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.92);
   overflow: hidden;
-  transition-property: opacity, transform, display, overlay;
-  transition-duration: 0.22s;
-  transition-timing-function: ease-out;
-  transition-behavior: allow-discrete;
 }
 
 dialog.compact-modal[open] {
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  transform: scale(1);
 }
 
 dialog.compact-modal::backdrop {
@@ -4513,22 +4505,16 @@ dialog.compact-modal::backdrop {
 @keyframes cinematicDealIn {
   0% {
     opacity: 0;
-    transform: translateY(24px) scale(0.96) rotateX(4deg);
+    transform: translateY(12px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1) rotateX(0deg);
+    transform: translateY(0);
   }
 }
 
-.exhibit-card,
-.subject-card,
-.stream-item,
-.foia-legal-page,
-.cork-node,
 .binder-spread-stage {
-  animation: cinematicDealIn 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--stagger-i, 0) * 32ms);
+  animation: cinematicDealIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .subject-card {
@@ -4791,4 +4777,91 @@ dialog.compact-modal::backdrop {
   flex-shrink: 0;
 }
 
+/* ==========================================================================
+   FLOATING SITE-WIDE GLOBAL HQ CHAT LAUNCHER & DRAWER
+   ========================================================================== */
+.global-chat-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 520;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+  color: #ffffff;
+  border: 1.5px solid #60a5fa;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(96, 165, 250, 0.25);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
 
+.global-chat-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(29, 78, 216, 0.55);
+}
+
+.global-chat-fab[hidden] {
+  display: none !important;
+}
+
+.global-chat-fab-badge {
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.66rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.25;
+}
+
+.global-chat-drawer {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  width: min(390px, calc(100vw - 24px));
+  height: min(560px, calc(100vh - 90px));
+  z-index: 540;
+  background: #13100d;
+  border: 1.5px solid #3b82f6;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.global-chat-drawer[hidden] {
+  display: none !important;
+}
+
+.global-chat-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2b251e;
+  flex-shrink: 0;
+}
+
+.global-chat-pill {
+  background: rgba(37, 99, 235, 0.25);
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
