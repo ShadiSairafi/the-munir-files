@@ -2829,7 +2829,6 @@
               placeholder="Message, paste pic/GIF, or drop link..."
               maxlength="400"
               autocomplete="off"
-              autocorrect="off"
               data-form-type="other"
             />
             <button type="submit" class="tool-btn is-active">
@@ -4392,11 +4391,14 @@
 
         return `
         <div class="chat-msg-item ${groupClasses}" data-chat-msg-id="${escapeHtmlAttr(m.id || "")}">
-          ${
-            isGroupStart
-              ? `<span class="detective-avatar-frame chat-avatar-pill" title="${escapeHtmlAttr(m.userName || "Detective")}">${renderAvatarHtml(m)}</span>`
-              : `<span class="chat-avatar-spacer" aria-hidden="true"></span>`
-          }
+          <div class="chat-avatar-col">
+            ${
+              isGroupStart
+                ? `<span class="detective-avatar-frame chat-avatar-pill" title="${escapeHtmlAttr(m.userName || "Detective")}">${renderAvatarHtml(m)}</span>`
+                : ""
+            }
+            <span class="chat-msg-time-outside">${escapeHtml(formatRelativeTime(m.ts))}</span>
+          </div>
           <div class="chat-msg-stack">
             ${
               isGroupStart
@@ -4407,14 +4409,11 @@
               <div class="chat-msg-body ${effectiveMediaUrl && !displayCaption ? "is-media-only" : ""}">
                 ${quotedHtml}
                 ${mediaHtml}
-                <div class="chat-msg-content-line">
-                  ${
-                    displayCaption
-                      ? `<span class="chat-msg-text">${escapeHtml(displayCaption)}</span>`
-                      : ""
-                  }
-                  <span class="chat-msg-time">${escapeHtml(formatRelativeTime(m.ts))}</span>
-                </div>
+                ${
+                  displayCaption
+                    ? `<div class="chat-msg-text">${escapeHtml(displayCaption)}</div>`
+                    : ""
+                }
               </div>
               <div class="chat-msg-actions">
                 <button
