@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=6" />
   <link rel="shortcut icon" href="/favicon.ico?v=6" />
   <link rel="apple-touch-icon" href="/favicon.png?v=6" />
-  <link rel="stylesheet" href="./styles.css?v=9" />
+  <link rel="stylesheet" href="./styles.css?v=10" />
 </head>
 <body class="is-vault-locked">
 
@@ -68,165 +68,380 @@
           <div class="brass-clasp" id="folderBrassClasp" title="Click or pull to untie Brass Evidence Clasp"></div>
 
           <!-- ================================================================
-               CAMOUFLAGED LOCKED VAULT OVERLAY (SHOWN WHEN LOCKED)
-               Hides all names, photos, and topics behind heavy chains & padlock
+               CAMOUFLAGED LOCKED VAULT OVERLAY (COVERS 100% OF THE FILE EDGE-TO-EDGE)
+               Hides all names, photos, and topics behind heavy 3D chains, wax seal & padlock
                ================================================================ -->
           <div class="cover-locked-vault-overlay" id="coverLockedVaultOverlay">
-            <!-- Criss-Crossing Heavy Steel Chains Across the Folder -->
-            <div class="vault-steel-chain chain-diag-1" aria-hidden="true"></div>
-            <div class="vault-steel-chain chain-diag-2" aria-hidden="true"></div>
-            <div class="vault-steel-chain chain-horiz" aria-hidden="true"></div>
+            <!-- Shared SVG Defs for Photorealistic 3D Forged Steel Chain Links -->
+            <svg class="vault-chain-defs-svg" width="0" height="0" aria-hidden="true" focusable="false">
+              <defs>
+                <!-- 3D Metallic Gradients for Chain Links -->
+                <linearGradient id="ironLinkOuter" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#9ca3af" />
+                  <stop offset="22%" stop-color="#f3f4f6" />
+                  <stop offset="48%" stop-color="#6b7280" />
+                  <stop offset="78%" stop-color="#1f2937" />
+                  <stop offset="100%" stop-color="#090d16" />
+                </linearGradient>
+                <linearGradient id="ironLinkInner" x1="0%" y1="100%" x2="0%" y2="0%">
+                  <stop offset="0%" stop-color="#d1d5db" />
+                  <stop offset="40%" stop-color="#4b5563" />
+                  <stop offset="100%" stop-color="#0f172a" />
+                </linearGradient>
+                <linearGradient id="ironBridgeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#374151" />
+                  <stop offset="28%" stop-color="#ffffff" />
+                  <stop offset="58%" stop-color="#9ca3af" />
+                  <stop offset="88%" stop-color="#1e293b" />
+                  <stop offset="100%" stop-color="#030712" />
+                </linearGradient>
+                <!-- Repeating Horizontal 3D Interlocking Chain Pattern -->
+                <pattern id="realisticIronChainPattern" x="0" y="0" width="68" height="44" patternUnits="userSpaceOnUse">
+                  <!-- Drop shadow under link -->
+                  <rect x="3" y="8" width="46" height="30" rx="15" fill="rgba(0,0,0,0.68)" />
+                  <!-- Main Open Oval Torus Link -->
+                  <rect x="2" y="5" width="46" height="28" rx="14" fill="none" stroke="url(#ironLinkOuter)" stroke-width="8.5" />
+                  <rect x="4" y="7" width="42" height="24" rx="12" fill="none" stroke="url(#ironLinkInner)" stroke-width="1.6" opacity="0.85" />
+                  <!-- Top Specular Highlight on Oval Link -->
+                  <path d="M13 4.5 H37" stroke="rgba(255,255,255,0.75)" stroke-width="1.8" stroke-linecap="round" />
+                  <!-- Shadow where Connector Link Passes Through -->
+                  <rect x="36" y="11" width="32" height="18" rx="8" fill="rgba(0,0,0,0.75)" />
+                  <!-- Side-On Connecting Link Bridging Adjacent Oval Links -->
+                  <rect x="38" y="12" width="28" height="14" rx="7" fill="url(#ironBridgeGrad)" stroke="#090d16" stroke-width="1.8" />
+                  <path d="M43 15.5 H61" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" />
+                </pattern>
+              </defs>
+            </svg>
 
-            <!-- Disguised / Blacked-Out Background Dossier Print -->
-            <div class="cover-court-stamp">
-              <span>Archive Ref: 99-CV-██████ &nbsp; Document ██-██ &nbsp; Status: SEALED VAULT</span>
-              <span>FEDERAL EVIDENCE DEPOSITORY // DIVISION 7</span>
-            </div>
+            <!-- 1. Full-File Armored Containment Shroud & Redacted Surface (Edge-to-Edge) -->
+            <div class="vault-full-shroud" aria-hidden="true">
+              <div class="vault-hazard-border-top"></div>
+              <div class="vault-hazard-border-bottom"></div>
 
-            <div class="cover-header-grid">
-              <div>
-                <p class="cover-agency-title">DEPARTMENT OF ARCHIVAL RECORDS // RESTRICTED CUSTODY UNIT</p>
-                <h1 class="cover-main-title" style="letter-spacing:0.06em;">
-                  CASE FILE <span class="vault-blackout-block">██████████</span>
-                </h1>
-                <p class="cover-subtitle">
-                  CLASSIFIED TELECOMMUNICATIONS &amp; FORENSIC EXHIBITS — <span class="vault-blackout-block">██████████████</span>
-                </p>
-                <div style="margin-top: 12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-                  <span class="rubber-stamp stamp-large">SEALED // CLASSIFIED</span>
-                  <span class="rubber-stamp" style="border-color:#1e293b; color:#1e293b; transform:rotate(2deg);">PASSCODE REQUIRED</span>
-                  <span class="cover-barcode-pill" aria-hidden="true">||| |||| | ||||| || ||| ████</span>
+              <!-- Bolted Steel Corner Brackets on all 4 corners of the file -->
+              <div class="vault-corner-bracket corner-tl"><span class="bracket-rivet"></span><span class="bracket-rivet"></span></div>
+              <div class="vault-corner-bracket corner-tr"><span class="bracket-rivet"></span><span class="bracket-rivet"></span></div>
+              <div class="vault-corner-bracket corner-bl"><span class="bracket-rivet"></span><span class="bracket-rivet"></span></div>
+              <div class="vault-corner-bracket corner-br"><span class="bracket-rivet"></span><span class="bracket-rivet"></span></div>
+
+              <!-- Full-Folder Redacted Background Print (Zero Real Info Shown) -->
+              <div class="vault-shroud-print">
+                <div class="cover-court-stamp" style="border-bottom-color:rgba(120,90,50,0.45);">
+                  <span>ARCHIVE CONTAINER: 99-CV-████████ &nbsp;•&nbsp; CUSTODY SEAL: #LV5-8841 &nbsp;•&nbsp; STATUS: CHAINED &amp; SEALED</span>
+                  <span>FEDERAL EVIDENCE DEPOSITORY // RESTRICTED VAULT DIVISION</span>
+                </div>
+
+                <div class="cover-header-grid" style="margin-top:8px;">
+                  <div>
+                    <p class="cover-agency-title">DEPARTMENT OF ARCHIVAL RECORDS // HIGH-SECURITY EVIDENCE CONTAINMENT</p>
+                    <h1 class="cover-main-title" style="letter-spacing:0.05em; font-size:clamp(1.7rem, 3.4vw, 2.5rem);">
+                      CLASSIFIED FILE <span class="vault-blackout-block">████████████</span>
+                    </h1>
+                    <p class="cover-subtitle">
+                      IMPOUNDED TELECOMMUNICATIONS &amp; FORENSIC EXHIBITS — <span class="vault-blackout-block">████████████████</span>
+                    </p>
+                    <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                      <span class="rubber-stamp stamp-large">SEALED // DO NOT OPEN</span>
+                      <span class="rubber-stamp" style="border-color:#1e293b; color:#1e293b; transform:rotate(1.5deg);">LEVEL-5 LOCKDOWN</span>
+                      <span class="cover-barcode-pill">||| |||| | ||||| || ||| ██████</span>
+                    </div>
+                  </div>
+
+                  <div class="cover-mugshot-card vault-redacted-mugshot">
+                    <div class="vault-mugshot-silhouette">
+                      <svg viewBox="0 0 80 80" width="54" height="54" fill="none">
+                        <circle cx="40" cy="27" r="13" fill="#27241f" stroke="#574e42" stroke-width="2"/>
+                        <path d="M16 66c0-13.255 10.745-24 24-24s24 10.745 24 24" fill="#27241f" stroke="#574e42" stroke-width="2"/>
+                        <rect x="10" y="20" width="60" height="14" rx="2" fill="#991b1b"/>
+                        <text x="40" y="30" text-anchor="middle" fill="#fff" font-family="monospace" font-size="8" font-weight="900">CLASSIFIED</text>
+                      </svg>
+                    </div>
+                    <div class="cover-mugshot-caption">
+                      SUBJECT: <span class="vault-blackout-block">████████</span><br />
+                      FILE ID: <span class="vault-blackout-block">████████</span><br />
+                      <span style="color:#b91c1c;">IDENTITY IMPOUNDED</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="cover-meta-box" style="margin-top:10px; opacity:0.62;">
+                  <div class="cover-meta-grid">
+                    <div class="cover-meta-item">
+                      <strong>PRIMARY SUBJECT:</strong> <span class="vault-blackout-block">████████████████</span>
+                    </div>
+                    <div class="cover-meta-item">
+                      <strong>KEY WITNESS:</strong> <span class="vault-blackout-block">██████████████</span>
+                    </div>
+                    <div class="cover-meta-item">
+                      <strong>ASSOCIATES:</strong> <span class="vault-blackout-block">████████████████</span>
+                    </div>
+                    <div class="cover-meta-item">
+                      <strong>INCIDENT DATES:</strong> <span class="vault-blackout-block">█████████████████</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Redacted Bottom Footer Lines Covering the Rest of the File -->
+                <div class="vault-bottom-redacted-strip">
+                  <div class="vault-redacted-line">
+                    <span>CUSTODY DIRECTIVE:</span>
+                    <span class="vault-blackout-block">████████████████████████████████████████</span>
+                    <span class="vault-blackout-block">██████████████████</span>
+                  </div>
+                  <div class="vault-redacted-line">
+                    <span>EXHIBIT INDEX:</span>
+                    <span class="vault-blackout-block">████████████████████████████</span>
+                    <span>• CLEARANCE CODE REQUIRED TO BREAK WAX &amp; STEEL SEAL</span>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <div class="cover-mugshot-card vault-redacted-mugshot">
-                <div class="vault-mugshot-silhouette" aria-hidden="true">
-                  <svg viewBox="0 0 80 80" width="58" height="58" fill="none">
-                    <circle cx="40" cy="28" r="14" fill="#27241f" stroke="#574e42" stroke-width="2"/>
-                    <path d="M16 68c0-13.255 10.745-24 24-24s24 10.745 24 24" fill="#27241f" stroke="#574e42" stroke-width="2"/>
-                    <rect x="12" y="21" width="56" height="14" rx="2" fill="#991b1b"/>
-                    <text x="40" y="31" text-anchor="middle" fill="#fff" font-family="monospace" font-size="8" font-weight="900">REDACTED</text>
+            <!-- 2. Full-Bleed Tamper-Evident Security Tape Straps Across Entire File -->
+            <div class="vault-security-tape tape-diag-1" aria-hidden="true">
+              <div class="vault-tape-text">
+                ⚠️ DO NOT BREAK SEAL // FEDERAL EVIDENCE VAULT #0049-X // LEVEL-5 CLEARANCE REQUIRED // UNAUTHORIZED ACCESS PROHIBITED ⚠️ DO NOT BREAK SEAL // FEDERAL EVIDENCE VAULT #0049-X ⚠️
+              </div>
+            </div>
+            <div class="vault-security-tape tape-diag-2" aria-hidden="true">
+              <div class="vault-tape-text">
+                🔒 CLASSIFIED CUSTODY SEAL // CHAINED &amp; IMPOUNDED DOSSIER // ENTER PASSCODE TO UNSHACKLE // DEPARTMENT OF ARCHIVAL RECORDS 🔒 CLASSIFIED CUSTODY SEAL // CHAINED &amp; IMPOUNDED DOSSIER 🔒
+              </div>
+            </div>
+
+            <!-- 3. Four Full-Folder 3D Interlocking Forged Steel Chains (Edge-to-Edge) -->
+            <div class="vault-chain-strip chain-diag-1" aria-hidden="true">
+              <svg width="100%" height="44" preserveAspectRatio="none">
+                <rect width="100%" height="44" fill="url(#realisticIronChainPattern)" />
+              </svg>
+            </div>
+            <div class="vault-chain-strip chain-diag-2" aria-hidden="true">
+              <svg width="100%" height="44" preserveAspectRatio="none">
+                <rect width="100%" height="44" fill="url(#realisticIronChainPattern)" />
+              </svg>
+            </div>
+            <div class="vault-chain-strip chain-horiz" aria-hidden="true">
+              <svg width="100%" height="44" preserveAspectRatio="none">
+                <rect width="100%" height="44" fill="url(#realisticIronChainPattern)" />
+              </svg>
+            </div>
+            <div class="vault-chain-strip chain-vert" aria-hidden="true">
+              <svg width="100%" height="44" preserveAspectRatio="none">
+                <rect width="100%" height="44" fill="url(#realisticIronChainPattern)" />
+              </svg>
+            </div>
+
+            <!-- 4. Center Nexus: Realistic 3D Crimson Wax Seal + Heavy Forged Padlock + Clearance Gate -->
+            <div class="vault-nexus-stage">
+              <!-- Giant Embossed Crimson Wax & Brass Seal Behind the Padlock Junction (Splits in Half on Unlock!) -->
+              <div class="vault-wax-seal-assembly" aria-hidden="true">
+                <div class="vault-wax-half wax-left">
+                  <svg viewBox="0 0 220 220" width="220" height="220">
+                    <defs>
+                      <radialGradient id="waxRedGradL" cx="45%" cy="38%" r="58%">
+                        <stop offset="0%" stop-color="#dc2626" />
+                        <stop offset="52%" stop-color="#991b1b" />
+                        <stop offset="85%" stop-color="#5c0b0b" />
+                        <stop offset="100%" stop-color="#3b0505" />
+                      </radialGradient>
+                    </defs>
+                    <!-- Left Half Clip -->
+                    <clipPath id="waxSplitLeftClip">
+                      <polygon points="0,0 112,0 105,45 115,90 103,130 114,175 108,220 0,220" />
+                    </clipPath>
+                    <g clip-path="url(#waxSplitLeftClip)">
+                      <!-- Organic Scalloped Melted Wax Rim -->
+                      <path
+                        d="M110 10 C135 8,158 18,176 34 C195 50,208 75,209 105 C210 135,198 164,178 182 C158 200,136 211,110 210 C84 211,58 201,40 182 C20 163,9 136,11 106 C13 76,24 50,44 33 C64 16,85 12,110 10 Z"
+                        fill="url(#waxRedGradL)"
+                        stroke="#450a0a"
+                        stroke-width="3"
+                      />
+                      <!-- Embossed Inner Wax Ridge -->
+                      <circle cx="110" cy="110" r="78" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-opacity="0.45" />
+                      <circle cx="110" cy="110" r="73" fill="none" stroke="#3b0505" stroke-width="4" />
+                      <circle cx="110" cy="110" r="56" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="5 3" stroke-opacity="0.7" />
+                      <!-- Embossed Seal Text & Stars -->
+                      <text x="110" y="50" text-anchor="middle" fill="#fecaca" opacity="0.75" font-family="monospace" font-size="9.5" font-weight="900" letter-spacing="2">★ CLASSIFIED VAULT ★</text>
+                      <text x="110" y="180" text-anchor="middle" fill="#fecaca" opacity="0.75" font-family="monospace" font-size="9" font-weight="900" letter-spacing="1.5">OFFICIAL CUSTODY SEAL</text>
+                    </g>
                   </svg>
                 </div>
-                <div class="cover-mugshot-caption">
-                  SUBJECT: <span class="vault-blackout-block">██████</span><br />
-                  ALIAS: <span class="vault-blackout-block">████████</span><br />
-                  <span style="color:#b91c1c;">IDENTITY SEALED</span>
+                <div class="vault-wax-half wax-right">
+                  <svg viewBox="0 0 220 220" width="220" height="220">
+                    <defs>
+                      <radialGradient id="waxRedGradR" cx="45%" cy="38%" r="58%">
+                        <stop offset="0%" stop-color="#dc2626" />
+                        <stop offset="52%" stop-color="#991b1b" />
+                        <stop offset="85%" stop-color="#5c0b0b" />
+                        <stop offset="100%" stop-color="#3b0505" />
+                      </radialGradient>
+                    </defs>
+                    <!-- Right Half Clip -->
+                    <clipPath id="waxSplitRightClip">
+                      <polygon points="112,0 220,0 220,220 108,220 114,175 103,130 115,90 105,45" />
+                    </clipPath>
+                    <g clip-path="url(#waxSplitRightClip)">
+                      <path
+                        d="M110 10 C135 8,158 18,176 34 C195 50,208 75,209 105 C210 135,198 164,178 182 C158 200,136 211,110 210 C84 211,58 201,40 182 C20 163,9 136,11 106 C13 76,24 50,44 33 C64 16,85 12,110 10 Z"
+                        fill="url(#waxRedGradR)"
+                        stroke="#450a0a"
+                        stroke-width="3"
+                      />
+                      <circle cx="110" cy="110" r="78" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-opacity="0.45" />
+                      <circle cx="110" cy="110" r="73" fill="none" stroke="#3b0505" stroke-width="4" />
+                      <circle cx="110" cy="110" r="56" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="5 3" stroke-opacity="0.7" />
+                      <text x="110" y="50" text-anchor="middle" fill="#fecaca" opacity="0.75" font-family="monospace" font-size="9.5" font-weight="900" letter-spacing="2">★ CLASSIFIED VAULT ★</text>
+                      <text x="110" y="180" text-anchor="middle" fill="#fecaca" opacity="0.75" font-family="monospace" font-size="9" font-weight="900" letter-spacing="1.5">OFFICIAL CUSTODY SEAL</text>
+                    </g>
+                  </svg>
                 </div>
-              </div>
-            </div>
-
-            <div class="cover-meta-box" style="opacity:0.68; filter:blur(0.4px);">
-              <div class="cover-meta-grid">
-                <div class="cover-meta-item">
-                  <strong>PRIMARY SUBJECT:</strong> <span class="vault-blackout-block">███████████████</span>
-                </div>
-                <div class="cover-meta-item">
-                  <strong>KEY WITNESS:</strong> <span class="vault-blackout-block">█████████████</span>
-                </div>
-                <div class="cover-meta-item">
-                  <strong>ASSOCIATE:</strong> <span class="vault-blackout-block">██████████████</span>
-                </div>
-                <div class="cover-meta-item">
-                  <strong>INCIDENT WINDOW:</strong> <span class="vault-blackout-block">████████████████</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- MASSIVE CENTER PADLOCK & PASSCODE GATE -->
-            <div class="vault-padlock-centerpiece" id="vaultPadlockCard">
-              <div class="vault-padlock-icon-wrap" id="vaultPadlockGraphic" aria-hidden="true">
-                <svg class="vault-padlock-svg" viewBox="0 0 120 145" fill="none">
-                  <!-- Heavy Steel Shackle -->
-                  <path
-                    class="padlock-shackle"
-                    d="M34 58V38C34 22.536 45.64 10 60 10C74.36 10 86 22.536 86 38V58"
-                    stroke="url(#shackleGrad)"
-                    stroke-width="14"
-                    stroke-linecap="round"
-                  />
-                  <!-- Heavy Armored Brass/Steel Padlock Body -->
-                  <rect
-                    x="16"
-                    y="54"
-                    width="88"
-                    height="78"
-                    rx="12"
-                    fill="url(#bodyGrad)"
-                    stroke="#f59e0b"
-                    stroke-width="3"
-                  />
-                  <rect
-                    x="23"
-                    y="61"
-                    width="74"
-                    height="64"
-                    rx="8"
-                    stroke="rgba(255,255,255,0.18)"
-                    stroke-width="1.5"
-                    stroke-dasharray="4 3"
-                  />
-                  <!-- Corner Rivets -->
-                  <circle cx="28" cy="66" r="3" fill="#78350f" />
-                  <circle cx="92" cy="66" r="3" fill="#78350f" />
-                  <circle cx="28" cy="118" r="3" fill="#78350f" />
-                  <circle cx="92" cy="118" r="3" fill="#78350f" />
-                  <!-- Keyhole Escutcheon -->
-                  <circle cx="60" cy="88" r="14" fill="#1c1917" stroke="#fbbf24" stroke-width="2" />
-                  <circle cx="60" cy="84" r="5" fill="#ef4444" />
-                  <path d="M57 86L55 98H65L63 86Z" fill="#ef4444" />
-                  <defs>
-                    <linearGradient id="shackleGrad" x1="34" y1="10" x2="86" y2="58" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stop-color="#e5e7eb" />
-                      <stop offset="50%" stop-color="#9ca3af" />
-                      <stop offset="100%" stop-color="#4b5563" />
-                    </linearGradient>
-                    <linearGradient id="bodyGrad" x1="16" y1="54" x2="104" y2="132" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stop-color="#d97706" />
-                      <stop offset="45%" stop-color="#b45309" />
-                      <stop offset="100%" stop-color="#451a03" />
-                    </linearGradient>
-                  </defs>
-                </svg>
               </div>
 
-              <div class="vault-lock-badge">
-                🔒 LEVEL-5 CLASSIFIED LOCKDOWN // AUTHORIZATION REQUIRED
-              </div>
-              <div class="vault-lock-title">
-                THIS DOSSIER IS CHAINED &amp; SEALED
-              </div>
-              <p class="vault-lock-desc">
-                Enter the clearance passcode to unlock the chains and unseal the file contents.
-              </p>
+              <!-- Central Padlock & Passcode Terminal Plate -->
+              <div class="vault-padlock-centerpiece" id="vaultPadlockCard">
+                <div class="vault-padlock-icon-wrap" id="vaultPadlockGraphic" aria-hidden="true">
+                  <svg class="vault-padlock-svg" viewBox="0 0 140 168" fill="none">
+                    <defs>
+                      <!-- 3D Chrome-Steel Shackle Gradient -->
+                      <linearGradient id="shackleChrome" x1="28" y1="8" x2="112" y2="75" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#f8fafc" />
+                        <stop offset="22%" stop-color="#cbd5e1" />
+                        <stop offset="50%" stop-color="#475569" />
+                        <stop offset="78%" stop-color="#e2e8f0" />
+                        <stop offset="100%" stop-color="#1e293b" />
+                      </linearGradient>
+                      <!-- Heavy Forged Brass Lock Body Gradient -->
+                      <linearGradient id="brassLockBody" x1="14" y1="60" x2="126" y2="158" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#fbbf24" />
+                        <stop offset="25%" stop-color="#d97706" />
+                        <stop offset="60%" stop-color="#92400e" />
+                        <stop offset="88%" stop-color="#451a03" />
+                        <stop offset="100%" stop-color="#78350f" />
+                      </linearGradient>
+                      <!-- Recessed Armor Plate Gradient -->
+                      <linearGradient id="armorPlateGrad" x1="24" y1="70" x2="116" y2="148" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#292524" />
+                        <stop offset="50%" stop-color="#1c1917" />
+                        <stop offset="100%" stop-color="#0c0a09" />
+                      </linearGradient>
+                    </defs>
 
-              <form class="vault-passcode-form" id="vaultPasscodeForm" autocomplete="off">
-                <div class="vault-input-row">
-                  <input
-                    type="password"
-                    id="vaultPasscodeInput"
-                    class="vault-passcode-input"
-                    placeholder="Enter clearance passcode..."
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                  <button
-                    type="button"
-                    class="vault-toggle-vis-btn"
-                    id="vaultToggleVisBtn"
-                    title="Show / Hide Passcode"
-                    aria-label="Show or Hide Passcode"
-                  >
-                    👁️
-                  </button>
-                  <button type="submit" class="vault-unlock-btn" id="vaultUnlockBtn">
-                    <span>🔓 UNLOCK FILE</span>
-                  </button>
+                    <!-- Heavy Hardened-Steel Shackle (Animates Up & Swings Open on Unlock) -->
+                    <g class="padlock-shackle">
+                      <!-- Shackle Cast Shadow -->
+                      <path
+                        d="M40 68V40C40 22.327 53.431 8 70 8C86.569 8 100 22.327 100 40V68"
+                        stroke="rgba(0,0,0,0.65)"
+                        stroke-width="19"
+                        stroke-linecap="round"
+                      />
+                      <!-- Main Chrome Shackle Bar -->
+                      <path
+                        d="M40 66V40C40 22.327 53.431 8 70 8C86.569 8 100 22.327 100 40V66"
+                        stroke="url(#shackleChrome)"
+                        stroke-width="15"
+                        stroke-linecap="round"
+                      />
+                      <!-- Specular Highlight Rim on Shackle -->
+                      <path
+                        d="M44 62V40C44 24.536 55.64 12 70 12C84.36 12 96 24.536 96 40V52"
+                        stroke="rgba(255,255,255,0.65)"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                      />
+                      <!-- Mechanical Lock Notch on Left Shackle Leg -->
+                      <rect x="33" y="50" width="7" height="6" rx="1.5" fill="#1e293b" />
+                    </g>
+
+                    <!-- Shackle Entry Collars -->
+                    <ellipse cx="40" cy="64" rx="11" ry="4" fill="#1c1917" stroke="#f59e0b" stroke-width="1.5" />
+                    <ellipse cx="100" cy="64" rx="11" ry="4" fill="#1c1917" stroke="#f59e0b" stroke-width="1.5" />
+
+                    <!-- Outer Chamfered Forged Brass Lock Body -->
+                    <rect
+                      x="16"
+                      y="62"
+                      width="108"
+                      height="94"
+                      rx="14"
+                      fill="url(#brassLockBody)"
+                      stroke="#fde68a"
+                      stroke-width="2.5"
+                    />
+                    <!-- Inner Recessed Gunmetal Armor Core -->
+                    <rect
+                      x="25"
+                      y="71"
+                      width="90"
+                      height="76"
+                      rx="9"
+                      fill="url(#armorPlateGrad)"
+                      stroke="#b45309"
+                      stroke-width="2"
+                    />
+                    <!-- Horizontal Laminated Steel Seam Lines -->
+                    <line x1="27" y1="88" x2="113" y2="88" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" />
+                    <line x1="27" y1="130" x2="113" y2="130" stroke="rgba(255,255,255,0.07)" stroke-width="1.5" />
+
+                    <!-- 4 Heavy Corner Hex Rivets -->
+                    <circle cx="34" cy="80" r="4" fill="#78350f" stroke="#fbbf24" stroke-width="1.2" />
+                    <circle cx="106" cy="80" r="4" fill="#78350f" stroke="#fbbf24" stroke-width="1.2" />
+                    <circle cx="34" cy="138" r="4" fill="#78350f" stroke="#fbbf24" stroke-width="1.2" />
+                    <circle cx="106" cy="138" r="4" fill="#78350f" stroke="#fbbf24" stroke-width="1.2" />
+
+                    <!-- Rotating Brass Keyhole Cylinder Escutcheon -->
+                    <g class="padlock-keyhole-cylinder">
+                      <circle cx="70" cy="109" r="20" fill="url(#brassLockBody)" stroke="#fde68a" stroke-width="2" />
+                      <circle cx="70" cy="109" r="14" fill="#090807" stroke="#92400e" stroke-width="1.5" />
+                      <circle cx="70" cy="105" r="5" fill="#ef4444" class="padlock-keyhole-glow" />
+                      <path d="M66.5 107L64.5 119H75.5L73.5 107Z" fill="#ef4444" class="padlock-keyhole-glow" />
+                    </g>
+
+                    <!-- Stamped Serial Plate -->
+                    <text x="70" y="143" text-anchor="middle" fill="#d97706" font-family="monospace" font-size="7.5" font-weight="900" letter-spacing="1.5">US-GOV // LOCK #0049</text>
+                  </svg>
                 </div>
-                <div class="vault-error-msg" id="vaultErrorMsg" hidden>
-                  ⛔ ACCESS DENIED — INVALID CLEARANCE PASSCODE
+
+                <div class="vault-lock-badge" id="vaultStatusBadge">
+                  <span class="vault-status-dot"></span>
+                  <span>LEVEL-5 CLASSIFIED LOCKDOWN // SEAL INTACT</span>
                 </div>
-              </form>
+                <div class="vault-lock-title">
+                  THIS FILE IS CHAINED &amp; WAX-SEALED
+                </div>
+                <p class="vault-lock-desc">
+                  Enter the security clearance passcode to unshackle the chains and break the wax custody seal.
+                </p>
+
+                <form class="vault-passcode-form" id="vaultPasscodeForm" autocomplete="off">
+                  <div class="vault-input-row">
+                    <input
+                      type="password"
+                      id="vaultPasscodeInput"
+                      class="vault-passcode-input"
+                      placeholder="Enter clearance passcode..."
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <button
+                      type="button"
+                      class="vault-toggle-vis-btn"
+                      id="vaultToggleVisBtn"
+                      title="Show / Hide Passcode"
+                      aria-label="Show or Hide Passcode"
+                    >
+                      👁️
+                    </button>
+                    <button type="submit" class="vault-unlock-btn" id="vaultUnlockBtn">
+                      <span>🔓 UNSHACKLE FILE</span>
+                    </button>
+                  </div>
+                  <div class="vault-error-msg" id="vaultErrorMsg" hidden>
+                    ⛔ ACCESS DENIED — INVALID CLEARANCE PASSCODE
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
 
@@ -1170,8 +1385,8 @@
     </div>
   </aside>
 
-  <script src="./icons.js?v=9"></script>
-  <script src="./data.js?v=9"></script>
-  <script src="./app.js?v=9"></script>
+  <script src="./icons.js?v=10"></script>
+  <script src="./data.js?v=10"></script>
+  <script src="./app.js?v=10"></script>
 </body>
 </html>

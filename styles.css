@@ -4954,31 +4954,200 @@ body.is-vault-locked .folder-tab-code {
   color: #fecaca !important;
 }
 
-/* Toggle Front Cover between Camouflaged Padlock Overlay vs Real Unlocked Cover */
+/* Toggle Front Cover between Full-Bleed Chained Vault Overlay vs Real Unlocked Cover */
 .cover-locked-vault-overlay {
   display: none;
 }
+
 .cover-unlocked-content {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 1.35rem;
   flex: 1;
+  transition: opacity 0.45s ease, filter 0.45s ease;
 }
 
+/* Keep layout height intact while hiding real cover content until unsealing starts */
 body.is-vault-locked .cover-unlocked-content {
-  display: none !important;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* As soon as the unlock sequence triggers, reveal the real cover underneath the whipping chains! */
+body.is-vault-locked.is-unsealing-active .cover-unlocked-content {
+  visibility: visible;
+  opacity: 1;
+}
+
+body.is-vault-locked .brass-clasp,
+body.is-vault-locked .folder-red-string {
+  z-index: 4;
 }
 
 body.is-vault-locked .cover-locked-vault-overlay {
-  position: relative;
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 3px 11px 11px 3px;
+}
+
+.vault-chain-defs-svg {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* 1. Full-File Armored Containment Shroud (Covers 100% of the Manila Folder Edge-to-Edge) */
+.vault-full-shroud {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(28, 22, 16, 0.16) 0%, rgba(14, 11, 8, 0.58) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.04) 0px,
+      rgba(0, 0, 0, 0.04) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(135deg, #dec08e 0%, #c8a267 52%, #b0884a 100%);
+  box-shadow:
+    inset 0 0 85px rgba(10, 7, 4, 0.68),
+    inset 0 0 0 3px rgba(28, 22, 15, 0.55);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 1.15rem;
-  flex: 1;
-  overflow: hidden;
-  border-radius: 4px;
+  transition:
+    opacity 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.58s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.52s ease;
+}
+
+/* Top & Bottom Classified Security Hazard Borders Across Full Width of File */
+.vault-hazard-border-top,
+.vault-hazard-border-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 12px;
+  z-index: 6;
+  background: repeating-linear-gradient(
+    -45deg,
+    #18130e 0px,
+    #18130e 12px,
+    #b45309 12px,
+    #b45309 24px
+  );
+  border-top: 1px solid #090807;
+  border-bottom: 1px solid #090807;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.vault-hazard-border-top {
+  top: 0;
+}
+
+.vault-hazard-border-bottom {
+  bottom: 0;
+}
+
+/* Heavy Bolted Steel Corner Brackets on All 4 Corners of the File */
+.vault-corner-bracket {
+  position: absolute;
+  width: 54px;
+  height: 54px;
+  z-index: 8;
+  background: linear-gradient(135deg, #4b5563 0%, #1f2937 55%, #0f172a 100%);
+  border: 2px solid #9ca3af;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.75),
+    inset 0 1px 1px rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 6px;
+}
+
+.vault-corner-bracket .bracket-rivet {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f3f4f6, #374151 70%, #090d16);
+  border: 1px solid #111827;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.vault-corner-bracket.corner-tl {
+  top: 0;
+  left: 0;
+  border-radius: 2px 0 14px 0;
+  border-top: none;
+  border-left: none;
+}
+
+.vault-corner-bracket.corner-tr {
+  top: 0;
+  right: 0;
+  border-radius: 0 10px 0 14px;
+  border-top: none;
+  border-right: none;
+}
+
+.vault-corner-bracket.corner-bl {
+  bottom: 0;
+  left: 0;
+  border-radius: 0 14px 0 2px;
+  border-bottom: none;
+  border-left: none;
+}
+
+.vault-corner-bracket.corner-br {
+  bottom: 0;
+  right: 0;
+  border-radius: 14px 0 10px 0;
+  border-bottom: none;
+  border-right: none;
+}
+
+.vault-shroud-print {
+  position: relative;
+  z-index: 3;
+  padding: clamp(1.4rem, 2.8vw, 2.2rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  filter: contrast(1.04);
+}
+
+.vault-bottom-redacted-strip {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1.5px dashed rgba(60, 42, 20, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #292118;
+  opacity: 0.78;
+}
+
+.vault-redacted-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Heavy Censor Bars on the Disguised Cover */
@@ -4998,8 +5167,8 @@ body.is-vault-locked .cover-locked-vault-overlay {
 }
 
 .vault-mugshot-silhouette {
-  width: 86px;
-  height: 92px;
+  width: 82px;
+  height: 86px;
   background: radial-gradient(circle at 50% 35%, #2b2620, #12100d);
   border: 1px solid #443c30;
   display: flex;
@@ -5009,83 +5178,169 @@ body.is-vault-locked .cover-locked-vault-overlay {
   border-radius: 3px;
 }
 
-/* Criss-Crossing Heavy Iron/Steel Chains Strapped Across the Folder */
-.vault-steel-chain {
+/* 2. Full-Folder Tamper-Evident Security Tape Straps */
+.vault-security-tape {
   position: absolute;
-  left: -15%;
-  width: 130%;
-  height: 26px;
-  z-index: 12;
+  top: 50%;
+  left: 50%;
+  width: 146%;
+  height: 30px;
+  z-index: 10;
   pointer-events: none;
-  background-image:
+  background:
     repeating-linear-gradient(
       90deg,
-      #1f2937 0px,
-      #4b5563 6px,
-      #9ca3af 11px,
-      #374151 16px,
-      #111827 22px,
-      transparent 22px,
-      transparent 26px
+      rgba(255, 255, 255, 0.04) 0px,
+      rgba(255, 255, 255, 0.04) 2px,
+      transparent 2px,
+      transparent 5px
     ),
-    linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(75, 85, 99, 0.95), rgba(17, 24, 39, 0.9));
-  background-size: 28px 100%, 100% 10px;
-  background-position: 0 0, 0 50%;
-  background-repeat: repeat-x, no-repeat;
-  border-top: 2px solid rgba(209, 213, 219, 0.45);
-  border-bottom: 3px solid rgba(0, 0, 0, 0.88);
-  border-radius: 12px;
+    linear-gradient(180deg, #991b1b 0%, #7f1d1d 50%, #450a0a 100%);
+  border-top: 2px dashed rgba(254, 202, 202, 0.65);
+  border-bottom: 2px dashed rgba(254, 202, 202, 0.65);
   box-shadow:
-    0 10px 22px rgba(0, 0, 0, 0.78),
-    0 2px 4px rgba(0, 0, 0, 0.9);
-  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease;
+    0 8px 20px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition:
+    transform 0.62s cubic-bezier(0.55, 0.06, 0.68, 0.19),
+    opacity 0.48s ease;
 }
 
-.vault-steel-chain.chain-diag-1 {
-  top: 48%;
-  transform: rotate(19deg);
+.vault-tape-text {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #fef2f2;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
-.vault-steel-chain.chain-diag-2 {
-  top: 48%;
-  transform: rotate(-19deg);
+.vault-security-tape.tape-diag-1 {
+  transform: translate(-50%, -50%) rotate(28deg);
 }
 
-.vault-steel-chain.chain-horiz {
+.vault-security-tape.tape-diag-2 {
+  transform: translate(-50%, -50%) rotate(-28deg);
+}
+
+/* 3. Four Full-Folder 3D Interlocking Forged Steel Chains (Edge-to-Edge) */
+.vault-chain-strip {
+  position: absolute;
   top: 50%;
-  transform: translateY(-50%);
-  height: 22px;
-  opacity: 0.92;
+  left: 50%;
+  width: 152%;
+  height: 44px;
+  z-index: 15;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 12px 14px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 3px 4px rgba(0, 0, 0, 0.92));
+  transition:
+    transform 0.64s cubic-bezier(0.6, -0.18, 0.74, 0.05),
+    opacity 0.52s ease;
 }
 
-/* Massive Armored Padlock & Passcode Gate in the Center of the Folder */
+.vault-chain-strip svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.vault-chain-strip.chain-diag-1 {
+  transform: translate(-50%, -50%) rotate(33deg);
+}
+
+.vault-chain-strip.chain-diag-2 {
+  transform: translate(-50%, -50%) rotate(-33deg);
+}
+
+.vault-chain-strip.chain-horiz {
+  width: 112%;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.vault-chain-strip.chain-vert {
+  width: 112%;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+/* 4. Center Nexus: Embossed Crimson Wax Seal + 3D Forged Padlock + Clearance Gate */
+.vault-nexus-stage {
+  position: relative;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 16px;
+}
+
+/* Giant 2-Part Embossed Crimson Wax Seal Behind the Padlock Junction */
+.vault-wax-seal-assembly {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220px;
+  height: 220px;
+  transform: translate(-50%, -68%);
+  z-index: 18;
+  pointer-events: none;
+}
+
+.vault-wax-half {
+  position: absolute;
+  inset: 0;
+  filter:
+    drop-shadow(0 14px 24px rgba(0, 0, 0, 0.88))
+    drop-shadow(0 3px 6px rgba(0, 0, 0, 0.95));
+  transition:
+    transform 0.58s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.48s ease;
+}
+
+/* Central Padlock & Passcode Terminal Plate */
 .vault-padlock-centerpiece {
   position: relative;
-  z-index: 20;
-  margin: auto;
-  width: min(470px, 95%);
-  background: linear-gradient(155deg, rgba(22, 19, 15, 0.97) 0%, rgba(12, 10, 8, 0.99) 100%);
+  z-index: 25;
+  width: min(460px, 92%);
+  margin-top: 44px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(217, 119, 6, 0.16), transparent 65%),
+    linear-gradient(160deg, rgba(24, 21, 18, 0.97) 0%, rgba(10, 9, 7, 0.99) 100%);
   border: 2px solid #d97706;
-  border-radius: 12px;
-  padding: 18px 20px 18px;
+  border-radius: 14px;
+  padding: 16px 20px 18px;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.92),
-    0 0 0 4px rgba(0, 0, 0, 0.65),
-    0 0 32px rgba(217, 119, 6, 0.25);
+    0 28px 65px rgba(0, 0, 0, 0.95),
+    0 0 0 4px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(254, 243, 199, 0.28),
+    0 0 36px rgba(217, 119, 6, 0.28);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 8px;
+  gap: 7px;
   color: #f5eedc;
+  transition:
+    transform 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.45s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
 }
 
 .vault-padlock-icon-wrap {
-  width: 84px;
-  height: 98px;
-  margin-top: -46px;
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.88));
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 96px;
+  height: 114px;
+  margin-top: -64px;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.94));
+  transform-origin: 50% 25%;
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .vault-padlock-svg {
@@ -5095,52 +5350,226 @@ body.is-vault-locked .cover-locked-vault-overlay {
 }
 
 .vault-padlock-svg .padlock-shackle {
-  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
-  transform-origin: 86px 58px;
+  transition: transform 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: 100px 64px;
 }
 
-.vault-padlock-centerpiece.is-unlocking .padlock-shackle {
-  transform: translateY(-14px) rotate(22deg);
+.vault-padlock-svg .padlock-keyhole-cylinder {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 70px 109px;
 }
 
-.vault-padlock-centerpiece.is-unlocking {
-  border-color: #22c55e;
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.92),
-    0 0 35px rgba(34, 197, 94, 0.45);
+.vault-padlock-svg .padlock-keyhole-glow {
+  transition: fill 0.24s ease;
 }
 
-@keyframes vaultDenyShake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-10px) rotate(-1.5deg); }
-  40% { transform: translateX(10px) rotate(1.5deg); }
-  60% { transform: translateX(-8px) rotate(-1deg); }
-  80% { transform: translateX(8px) rotate(1deg); }
-}
-
-.vault-padlock-centerpiece.is-shake-error {
-  animation: vaultDenyShake 0.42s ease;
-  border-color: #ef4444;
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.92),
-    0 0 32px rgba(239, 68, 68, 0.55);
-}
-
+/* Status Beacon Dot Inside Badge */
 .vault-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--font-mono);
   font-size: 0.64rem;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #fca5a5;
-  background: rgba(185, 28, 28, 0.25);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  padding: 3px 10px;
+  color: #fecaca;
+  background: rgba(153, 27, 27, 0.34);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  padding: 4px 11px;
   border-radius: 999px;
+  transition: all 0.25s ease;
+}
+
+.vault-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: vaultBeaconPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes vaultBeaconPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.42; transform: scale(0.85); }
+}
+
+/* ============================================================================
+   CHAIN RATTLE & PADLOCK CLANK ANIMATIONS (ON CLICK OR WRONG PASSCODE)
+   ============================================================================ */
+@keyframes vaultPadlockSwing {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  18% { transform: rotate(-9deg) translateY(-3px); }
+  36% { transform: rotate(8deg) translateY(2px); }
+  54% { transform: rotate(-6deg) translateY(-2px); }
+  72% { transform: rotate(4deg) translateY(1px); }
+}
+
+@keyframes vaultCardRattle {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  16% { transform: translateX(-11px) rotate(-1.4deg); }
+  32% { transform: translateX(11px) rotate(1.4deg); }
+  48% { transform: translateX(-8px) rotate(-1deg); }
+  64% { transform: translateX(8px) rotate(1deg); }
+  80% { transform: translateX(-4px) rotate(-0.4deg); }
+}
+
+@keyframes chainJoltDiag1 {
+  0%, 100% { transform: translate(-50%, -50%) rotate(33deg); }
+  25% { transform: translate(calc(-50% - 7px), calc(-50% - 4px)) rotate(33.8deg); }
+  50% { transform: translate(calc(-50% + 7px), calc(-50% + 4px)) rotate(32.2deg); }
+  75% { transform: translate(calc(-50% - 4px), calc(-50% - 2px)) rotate(33.4deg); }
+}
+
+@keyframes chainJoltDiag2 {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-33deg); }
+  25% { transform: translate(calc(-50% + 7px), calc(-50% - 4px)) rotate(-33.8deg); }
+  50% { transform: translate(calc(-50% - 7px), calc(-50% + 4px)) rotate(-32.2deg); }
+  75% { transform: translate(calc(-50% + 4px), calc(-50% - 2px)) rotate(-33.4deg); }
+}
+
+@keyframes chainJoltHoriz {
+  0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(calc(-50% + 8px), -50%) rotate(0.6deg); }
+  50% { transform: translate(calc(-50% - 8px), -50%) rotate(-0.6deg); }
+  75% { transform: translate(calc(-50% + 4px), -50%) rotate(0.3deg); }
+}
+
+@keyframes chainJoltVert {
+  0%, 100% { transform: translate(-50%, -50%) rotate(90deg); }
+  25% { transform: translate(-50%, calc(-50% - 8px)) rotate(90.6deg); }
+  50% { transform: translate(-50%, calc(-50% + 8px)) rotate(89.4deg); }
+  75% { transform: translate(-50%, calc(-50% - 4px)) rotate(90.3deg); }
+}
+
+.cover-locked-vault-overlay.is-rattling .vault-padlock-icon-wrap {
+  animation: vaultPadlockSwing 0.48s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+.cover-locked-vault-overlay.is-rattling .vault-padlock-centerpiece,
+.vault-padlock-centerpiece.is-shake-error {
+  animation: vaultCardRattle 0.46s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  border-color: #ef4444;
+  box-shadow:
+    0 28px 65px rgba(0, 0, 0, 0.95),
+    0 0 42px rgba(239, 68, 68, 0.65);
+}
+
+.cover-locked-vault-overlay.is-rattling .vault-chain-strip.chain-diag-1 {
+  animation: chainJoltDiag1 0.44s ease;
+}
+.cover-locked-vault-overlay.is-rattling .vault-chain-strip.chain-diag-2 {
+  animation: chainJoltDiag2 0.44s ease;
+}
+.cover-locked-vault-overlay.is-rattling .vault-chain-strip.chain-horiz {
+  animation: chainJoltHoriz 0.44s ease;
+}
+.cover-locked-vault-overlay.is-rattling .vault-chain-strip.chain-vert {
+  animation: chainJoltVert 0.44s ease;
+}
+
+/* ============================================================================
+   MULTI-STAGE UNLOCKING SEQUENCE (.is-unlocking-vault)
+   Stage 1: Keyhole turns 90deg + Shackle springs open + Badge turns emerald
+   Stage 2: Wax seal splits in half + 4 Steel chains whip off the folder edges
+   Stage 3: Containment shroud dissolves to unveil THE MUNIR FILES cover
+   ============================================================================ */
+.cover-locked-vault-overlay.is-unlocking-vault .padlock-keyhole-cylinder {
+  transform: rotate(90deg);
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .padlock-keyhole-glow {
+  fill: #22c55e;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .padlock-shackle {
+  transform: translateY(-20px) rotate(28deg);
+  transition-delay: 0.08s;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-lock-badge {
+  background: rgba(21, 128, 61, 0.35);
+  border-color: #4ade80;
+  color: #dcfce7;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 12px #22c55e;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-padlock-centerpiece {
+  border-color: #22c55e;
+  box-shadow:
+    0 28px 65px rgba(0, 0, 0, 0.95),
+    0 0 48px rgba(34, 197, 94, 0.55);
+  transform: translateY(42px) scale(0.92);
+  opacity: 0;
+  transition-delay: 0.34s;
+}
+
+/* Wax Seal Splits in Two Halves */
+.cover-locked-vault-overlay.is-unlocking-vault .vault-wax-half.wax-left {
+  transform: translate(-64px, 12px) rotate(-18deg) scale(0.92);
+  opacity: 0;
+  transition-delay: 0.24s;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-wax-half.wax-right {
+  transform: translate(64px, -12px) rotate(18deg) scale(0.92);
+  opacity: 0;
+  transition-delay: 0.24s;
+}
+
+/* 4 Heavy Steel Chains Whip Off the Folder Edges in 4 Directions */
+.cover-locked-vault-overlay.is-unlocking-vault .vault-chain-strip.chain-diag-1 {
+  transform: translate(-50%, -50%) rotate(33deg) translateX(115%);
+  opacity: 0;
+  transition-delay: 0.26s;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-chain-strip.chain-diag-2 {
+  transform: translate(-50%, -50%) rotate(-33deg) translateX(-115%);
+  opacity: 0;
+  transition-delay: 0.3s;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-chain-strip.chain-horiz {
+  transform: translate(-50%, -50%) rotate(0deg) translateX(-118%);
+  opacity: 0;
+  transition-delay: 0.22s;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-chain-strip.chain-vert {
+  transform: translate(-50%, -50%) rotate(90deg) translateX(118%);
+  opacity: 0;
+  transition-delay: 0.34s;
+}
+
+/* Tamper-Evident Security Tapes Snap & Retract */
+.cover-locked-vault-overlay.is-unlocking-vault .vault-security-tape.tape-diag-1 {
+  transform: translate(-50%, -50%) rotate(28deg) translateX(-115%);
+  opacity: 0;
+  transition-delay: 0.28s;
+}
+
+.cover-locked-vault-overlay.is-unlocking-vault .vault-security-tape.tape-diag-2 {
+  transform: translate(-50%, -50%) rotate(-28deg) translateX(115%);
+  opacity: 0;
+  transition-delay: 0.32s;
+}
+
+/* Full-File Shroud Dissolves to Reveal Real Cover Underneath */
+.cover-locked-vault-overlay.is-unlocking-vault .vault-full-shroud {
+  opacity: 0;
+  transform: scale(1.03);
+  filter: brightness(1.25) blur(3px);
+  transition-delay: 0.46s;
 }
 
 .vault-lock-title {
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 1.04rem;
   font-weight: 900;
   letter-spacing: 0.06em;
   color: #fef3c7;
@@ -5156,7 +5585,7 @@ body.is-vault-locked .cover-locked-vault-overlay {
 
 .vault-passcode-form {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 5px;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -5246,6 +5675,15 @@ body.is-vault-locked .cover-locked-vault-overlay {
 }
 
 @media (max-width: 640px) {
+  .vault-wax-seal-assembly {
+    width: 175px;
+    height: 175px;
+  }
+  .vault-padlock-icon-wrap {
+    width: 82px;
+    height: 98px;
+    margin-top: -54px;
+  }
   .vault-input-row {
     flex-wrap: wrap;
   }
@@ -5254,4 +5692,5 @@ body.is-vault-locked .cover-locked-vault-overlay {
     justify-content: center;
   }
 }
+
 

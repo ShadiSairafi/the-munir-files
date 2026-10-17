@@ -757,9 +757,70 @@
     }
   }
 
+  function playVaultChainSfx(mode = "rattle") {
+    if (!state.soundEnabled) return;
+    try {
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
+      if (mode === "rattle") {
+        // 3 rapid metallic chain clinks
+        [0, 0.065, 0.135].forEach((offset, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(920 + idx * 190, now + offset);
+          osc.frequency.exponentialRampToValueAtTime(240, now + offset + 0.055);
+          gain.gain.setValueAtTime(0.18, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.06);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.065);
+        });
+      } else if (mode === "unlock") {
+        // Stage 1: Heavy brass shackle spring pop (0.04s)
+        const boltOsc = ctx.createOscillator();
+        const boltGain = ctx.createGain();
+        boltOsc.type = "sawtooth";
+        boltOsc.frequency.setValueAtTime(320, now + 0.04);
+        boltOsc.frequency.exponentialRampToValueAtTime(880, now + 0.14);
+        boltGain.gain.setValueAtTime(0.22, now + 0.04);
+        boltGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+        boltOsc.connect(boltGain);
+        boltGain.connect(ctx.destination);
+        boltOsc.start(now + 0.04);
+        boltOsc.stop(now + 0.19);
+
+        // Stage 2: Cascading steel links whipping off the folder (0.22s - 0.55s)
+        [0.22, 0.28, 0.34, 0.41, 0.48].forEach((offset, idx) => {
+          const linkOsc = ctx.createOscillator();
+          const linkGain = ctx.createGain();
+          linkOsc.type = "square";
+          linkOsc.frequency.setValueAtTime(1150 - idx * 95, now + offset);
+          linkOsc.frequency.exponentialRampToValueAtTime(310, now + offset + 0.06);
+          linkGain.gain.setValueAtTime(0.12, now + offset);
+          linkGain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.065);
+          linkOsc.connect(linkGain);
+          linkGain.connect(ctx.destination);
+          linkOsc.start(now + offset);
+          linkOsc.stop(now + offset + 0.07);
+        });
+      }
+    } catch (_e) {}
+  }
+
   function shakeVaultPadlock() {
     playForensicSound("click");
+    playVaultChainSfx("rattle");
+    const overlay = document.getElementById("coverLockedVaultOverlay");
     const card = document.getElementById("vaultPadlockCard");
+    if (overlay) {
+      overlay.classList.remove("is-rattling");
+      void overlay.offsetWidth;
+      overlay.classList.add("is-rattling");
+    }
     if (card) {
       card.classList.remove("is-shake-error");
       void card.offsetWidth;
@@ -772,6 +833,9 @@
   function applyVaultLockState(locked) {
     state.vaultLocked = Boolean(locked);
     document.body.classList.toggle("is-vault-locked", state.vaultLocked);
+    if (!state.vaultLocked) {
+      document.body.classList.remove("is-unsealing-active");
+    }
     const tabBadge = document.getElementById("folderTabBadge");
     if (tabBadge) {
       tabBadge.textContent = state.vaultLocked ? "SEALED" : "UNSEALED";
@@ -784,19 +848,36 @@
   function unlockVaultWithPasscode(enteredCode) {
     const clean = String(enteredCode || "").trim();
     const errEl = document.getElementById("vaultErrorMsg");
+    const overlay = document.getElementById("coverLockedVaultOverlay");
     const card = document.getElementById("vaultPadlockCard");
+    const statusBadge = document.getElementById("vaultStatusBadge");
     if (clean.toLowerCase() === VAULT_PASSCODE.toLowerCase()) {
       if (errEl) errEl.hidden = true;
       playForensicSound("stamp");
+      playVaultChainSfx("unlock");
+      setTimeout(() => playForensicSound("folder_peel"), 260);
+
+      if (statusBadge) {
+        statusBadge.innerHTML = `<span class="vault-status-dot"></span><span>CLEARANCE VERIFIED // UNSHACKLING CHAINS...</span>`;
+      }
+
+      // Reveal real cover underneath while the chains whip off & wax seal splits!
+      document.body.classList.add("is-unsealing-active");
+      overlay?.classList.remove("is-rattling");
       card?.classList.remove("is-shake-error");
-      card?.classList.add("is-unlocking");
+      overlay?.classList.add("is-unlocking-vault");
+
       try {
         sessionStorage.setItem(VAULT_STORAGE_KEY, "1");
       } catch (_e) {}
+
       setTimeout(() => {
         applyVaultLockState(false);
-        card?.classList.remove("is-unlocking");
-      }, 360);
+        overlay?.classList.remove("is-unlocking-vault");
+        if (statusBadge) {
+          statusBadge.innerHTML = `<span class="vault-status-dot"></span><span>LEVEL-5 CLASSIFIED LOCKDOWN // SEAL INTACT</span>`;
+        }
+      }, 940);
     } else {
       if (errEl) errEl.hidden = false;
       shakeVaultPadlock();
@@ -805,6 +886,7 @@
 
   function lockVaultNow() {
     playForensicSound("folder_close");
+    playVaultChainSfx("rattle");
     try {
       sessionStorage.removeItem(VAULT_STORAGE_KEY);
     } catch (_e) {}
@@ -830,6 +912,12 @@
     }
     state.coverOpen = false;
     state.coverAnimating = false;
+    const overlay = document.getElementById("coverLockedVaultOverlay");
+    overlay?.classList.remove("is-unlocking-vault", "is-rattling");
+    const statusBadge = document.getElementById("vaultStatusBadge");
+    if (statusBadge) {
+      statusBadge.innerHTML = `<span class="vault-status-dot"></span><span>LEVEL-5 CLASSIFIED LOCKDOWN // SEAL INTACT</span>`;
+    }
     const input = document.getElementById("vaultPasscodeInput");
     if (input) input.value = "";
     const errEl = document.getElementById("vaultErrorMsg");
