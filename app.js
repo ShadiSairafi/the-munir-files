@@ -270,10 +270,17 @@
     5.5
   ];
 
+  const VAULT_PASSCODE = "FilesPavelion";
+  const VAULT_STORAGE_KEY = "munir_vault_unlocked_v1";
+
   // ============================================================================
   // APPLICATION STATE
   // ============================================================================
   const state = {
+    vaultLocked:
+      typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem(VAULT_STORAGE_KEY) !== "1"
+        : true,
     coverOpen: false,
     coverAnimating: false,
     folderTiltIndex: 0,
@@ -750,7 +757,92 @@
     }
   }
 
+  function shakeVaultPadlock() {
+    playForensicSound("click");
+    const card = document.getElementById("vaultPadlockCard");
+    if (card) {
+      card.classList.remove("is-shake-error");
+      void card.offsetWidth;
+      card.classList.add("is-shake-error");
+    }
+    const input = document.getElementById("vaultPasscodeInput");
+    input?.focus();
+  }
+
+  function applyVaultLockState(locked) {
+    state.vaultLocked = Boolean(locked);
+    document.body.classList.toggle("is-vault-locked", state.vaultLocked);
+    const tabBadge = document.getElementById("folderTabBadge");
+    if (tabBadge) {
+      tabBadge.textContent = state.vaultLocked ? "SEALED" : "UNSEALED";
+    }
+    document.title = state.vaultLocked
+      ? "RESTRICTED ARCHIVE // CLEARANCE REQUIRED (VAULT #0049-X)"
+      : "THE MUNIR FILES // Declassified Investigative Case Dossier (Case 1:26-cv-00049-MF)";
+  }
+
+  function unlockVaultWithPasscode(enteredCode) {
+    const clean = String(enteredCode || "").trim();
+    const errEl = document.getElementById("vaultErrorMsg");
+    const card = document.getElementById("vaultPadlockCard");
+    if (clean.toLowerCase() === VAULT_PASSCODE.toLowerCase()) {
+      if (errEl) errEl.hidden = true;
+      playForensicSound("stamp");
+      card?.classList.remove("is-shake-error");
+      card?.classList.add("is-unlocking");
+      try {
+        sessionStorage.setItem(VAULT_STORAGE_KEY, "1");
+      } catch (_e) {}
+      setTimeout(() => {
+        applyVaultLockState(false);
+        card?.classList.remove("is-unlocking");
+      }, 360);
+    } else {
+      if (errEl) errEl.hidden = false;
+      shakeVaultPadlock();
+    }
+  }
+
+  function lockVaultNow() {
+    playForensicSound("folder_close");
+    try {
+      sessionStorage.removeItem(VAULT_STORAGE_KEY);
+    } catch (_e) {}
+    if (state.lightboxOpen) {
+      closeLightbox();
+    }
+    if (state.globalChatDrawerOpen) {
+      toggleGlobalChatDrawer(false);
+    }
+    const coverStage = document.getElementById("dossierCoverStage");
+    if (coverStage) {
+      coverStage.style.display = "";
+      coverStage.classList.remove(
+        "is-opened",
+        "is-hidden",
+        "is-opening",
+        "is-dolly-into-pages",
+        "is-closing-start",
+        "is-closing-swing",
+        "is-peeling",
+        "is-anticipating"
+      );
+    }
+    state.coverOpen = false;
+    state.coverAnimating = false;
+    const input = document.getElementById("vaultPasscodeInput");
+    if (input) input.value = "";
+    const errEl = document.getElementById("vaultErrorMsg");
+    if (errEl) errEl.hidden = true;
+    applyVaultLockState(true);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
   function openDossierCinematically(fromPeel = false) {
+    if (state.vaultLocked) {
+      shakeVaultPadlock();
+      return;
+    }
     const coverStage = document.getElementById("dossierCoverStage");
     if (!coverStage || state.coverOpen || state.coverAnimating) return;
 
@@ -5986,6 +6078,13 @@
     let coverPressStartedOnOpenBtn = false;
 
     const beginCoverPress = (e, fromOpenButton = false) => {
+      if (state.vaultLocked) {
+        if (e.target && e.target.closest && e.target.closest("#vaultPadlockCard")) {
+          return;
+        }
+        shakeVaultPadlock();
+        return;
+      }
       if (state.coverOpen || state.coverAnimating) return;
       if (e.button !== undefined && e.button !== 0) return;
       if (e.target.closest(".redacted-bar")) return;
@@ -6063,7 +6162,7 @@
 
       folderWrapper.addEventListener("pointermove", (e) => {
         if (state.coverOpen || state.coverAnimating) return;
-        if (state.isPeelingCover) {
+        if (state.isPeelingCover && !state.vaultLocked) {
           updateFolderPeelDrag(e.clientX);
         }
         const rect = folderWrapper.getBoundingClientRect();
@@ -6071,7 +6170,11 @@
         const ny = (e.clientY - rect.top) / rect.height; // 0..1
         const tiltY = ((nx - 0.5) * 8).toFixed(2);
         const tiltX = ((0.5 - ny) * 6).toFixed(2);
-        const peekAngle = nx > 0.55 ? -Math.min(14, (nx - 0.55) * 28) : -3;
+        const peekAngle = state.vaultLocked
+          ? 0
+          : nx > 0.55
+          ? -Math.min(14, (nx - 0.55) * 28)
+          : -3;
         folderWrapper.style.setProperty("--hand-rx", `${tiltX}deg`);
         folderWrapper.style.setProperty("--hand-ry", `${tiltY}deg`);
         folderWrapper.style.setProperty("--folder-tilt-x", `${tiltX}deg`);
@@ -6096,6 +6199,39 @@
 
     closeCoverBtn?.addEventListener("click", () => {
       closeDossierCinematically();
+    });
+
+    document.getElementById("lockVaultBtn")?.addEventListener("click", () => {
+      lockVaultNow();
+    });
+
+    const vaultForm = document.getElementById("vaultPasscodeForm");
+    const vaultInput = document.getElementById("vaultPasscodeInput");
+    const vaultToggleVisBtn = document.getElementById("vaultToggleVisBtn");
+
+    vaultForm?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      unlockVaultWithPasscode(vaultInput?.value || "");
+    });
+
+    vaultInput?.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+    });
+
+    vaultInput?.addEventListener("input", () => {
+      const errEl = document.getElementById("vaultErrorMsg");
+      if (errEl) errEl.hidden = true;
+    });
+
+    vaultToggleVisBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!vaultInput) return;
+      playForensicSound("click");
+      const isPwd = vaultInput.type === "password";
+      vaultInput.type = isPwd ? "text" : "password";
+      vaultToggleVisBtn.textContent = isPwd ? "🙈" : "👁️";
+      vaultInput.focus();
     });
 
     // 2. Search Input
@@ -7440,6 +7576,7 @@
   }
 
   function init() {
+    applyVaultLockState(state.vaultLocked);
     forceApplyFavicon();
     resetFolderStraight();
     bindGlobalEvents();

@@ -4918,3 +4918,340 @@ dialog.compact-modal::backdrop {
   letter-spacing: 0.06em;
   flex-shrink: 0;
 }
+
+/* ============================================================================
+   CLASSIFIED VAULT LOCKDOWN & CAMOUFLAGE MODE (body.is-vault-locked)
+   ============================================================================ */
+body.is-vault-locked {
+  overflow: hidden !important;
+  height: 100vh !important;
+}
+
+/* Completely hide the workspace, command bar, and global chat while locked */
+body.is-vault-locked .top-command-bar,
+body.is-vault-locked #dossierMainApp,
+body.is-vault-locked #globalChatFabBtn,
+body.is-vault-locked #globalChatDrawer {
+  display: none !important;
+}
+
+/* Toggle folder tab text between Locked Camouflage vs Unlocked Real Title */
+.folder-tab-locked-text {
+  display: none;
+}
+.folder-tab-unlocked-text {
+  display: inline;
+}
+body.is-vault-locked .folder-tab-locked-text {
+  display: inline;
+  letter-spacing: 0.05em;
+}
+body.is-vault-locked .folder-tab-unlocked-text {
+  display: none !important;
+}
+body.is-vault-locked .folder-tab-code {
+  background: #7f1d1d !important;
+  color: #fecaca !important;
+}
+
+/* Toggle Front Cover between Camouflaged Padlock Overlay vs Real Unlocked Cover */
+.cover-locked-vault-overlay {
+  display: none;
+}
+.cover-unlocked-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.35rem;
+  flex: 1;
+}
+
+body.is-vault-locked .cover-unlocked-content {
+  display: none !important;
+}
+
+body.is-vault-locked .cover-locked-vault-overlay {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.15rem;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+/* Heavy Censor Bars on the Disguised Cover */
+.vault-blackout-block {
+  display: inline-block;
+  background: #141210;
+  color: #141210;
+  padding: 0 6px;
+  border-radius: 2px;
+  user-select: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.85);
+}
+
+.vault-redacted-mugshot {
+  background: #1c1915 !important;
+  border-color: #3f382e !important;
+}
+
+.vault-mugshot-silhouette {
+  width: 86px;
+  height: 92px;
+  background: radial-gradient(circle at 50% 35%, #2b2620, #12100d);
+  border: 1px solid #443c30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 6px;
+  border-radius: 3px;
+}
+
+/* Criss-Crossing Heavy Iron/Steel Chains Strapped Across the Folder */
+.vault-steel-chain {
+  position: absolute;
+  left: -15%;
+  width: 130%;
+  height: 26px;
+  z-index: 12;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      #1f2937 0px,
+      #4b5563 6px,
+      #9ca3af 11px,
+      #374151 16px,
+      #111827 22px,
+      transparent 22px,
+      transparent 26px
+    ),
+    linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(75, 85, 99, 0.95), rgba(17, 24, 39, 0.9));
+  background-size: 28px 100%, 100% 10px;
+  background-position: 0 0, 0 50%;
+  background-repeat: repeat-x, no-repeat;
+  border-top: 2px solid rgba(209, 213, 219, 0.45);
+  border-bottom: 3px solid rgba(0, 0, 0, 0.88);
+  border-radius: 12px;
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.78),
+    0 2px 4px rgba(0, 0, 0, 0.9);
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease;
+}
+
+.vault-steel-chain.chain-diag-1 {
+  top: 48%;
+  transform: rotate(19deg);
+}
+
+.vault-steel-chain.chain-diag-2 {
+  top: 48%;
+  transform: rotate(-19deg);
+}
+
+.vault-steel-chain.chain-horiz {
+  top: 50%;
+  transform: translateY(-50%);
+  height: 22px;
+  opacity: 0.92;
+}
+
+/* Massive Armored Padlock & Passcode Gate in the Center of the Folder */
+.vault-padlock-centerpiece {
+  position: relative;
+  z-index: 20;
+  margin: auto;
+  width: min(470px, 95%);
+  background: linear-gradient(155deg, rgba(22, 19, 15, 0.97) 0%, rgba(12, 10, 8, 0.99) 100%);
+  border: 2px solid #d97706;
+  border-radius: 12px;
+  padding: 18px 20px 18px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.92),
+    0 0 0 4px rgba(0, 0, 0, 0.65),
+    0 0 32px rgba(217, 119, 6, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  color: #f5eedc;
+}
+
+.vault-padlock-icon-wrap {
+  width: 84px;
+  height: 98px;
+  margin-top: -46px;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.88));
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vault-padlock-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.vault-padlock-svg .padlock-shackle {
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 86px 58px;
+}
+
+.vault-padlock-centerpiece.is-unlocking .padlock-shackle {
+  transform: translateY(-14px) rotate(22deg);
+}
+
+.vault-padlock-centerpiece.is-unlocking {
+  border-color: #22c55e;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.92),
+    0 0 35px rgba(34, 197, 94, 0.45);
+}
+
+@keyframes vaultDenyShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px) rotate(-1.5deg); }
+  40% { transform: translateX(10px) rotate(1.5deg); }
+  60% { transform: translateX(-8px) rotate(-1deg); }
+  80% { transform: translateX(8px) rotate(1deg); }
+}
+
+.vault-padlock-centerpiece.is-shake-error {
+  animation: vaultDenyShake 0.42s ease;
+  border-color: #ef4444;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.92),
+    0 0 32px rgba(239, 68, 68, 0.55);
+}
+
+.vault-lock-badge {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.vault-lock-title {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #fef3c7;
+}
+
+.vault-lock-desc {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.vault-passcode-form {
+  width: 100%;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.vault-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.vault-passcode-input {
+  flex: 1;
+  min-width: 0;
+  background: #0c0a08;
+  border: 1.5px solid #574936;
+  border-radius: 7px;
+  color: #fef08a;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 9px 12px;
+  letter-spacing: 0.06em;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.vault-passcode-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
+}
+
+.vault-toggle-vis-btn {
+  background: #1c1813;
+  border: 1.5px solid #4a3f30;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 0.88rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #e2d9c8;
+  flex-shrink: 0;
+  transition: all 0.14s ease;
+}
+
+.vault-toggle-vis-btn:hover {
+  border-color: #eab308;
+  background: #292218;
+}
+
+.vault-unlock-btn {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: #fff;
+  border: 1.5px solid #fbbf24;
+  border-radius: 7px;
+  padding: 9px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4);
+  transition: transform 0.14s ease, filter 0.14s ease;
+}
+
+.vault-unlock-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.vault-error-msg {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #fca5a5;
+  background: rgba(153, 27, 27, 0.35);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.vault-error-msg[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .vault-input-row {
+    flex-wrap: wrap;
+  }
+  .vault-unlock-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
